@@ -11,7 +11,7 @@ cd notia
 flutter pub add webview_flutter 'installed_apps:^1.6.0' shared_preferences http \
   speech_to_text flutter_tts sqflite connectivity_plus permission_handler math_expressions \
   supabase_flutter audioplayers path_provider 'google_sign_in:^6.2.2' url_launcher \
-  flutter_contacts geolocator battery_plus image_picker google_mlkit_text_recognition \
+  'flutter_contacts:^1.1.9' geolocator battery_plus image_picker google_mlkit_text_recognition \
   'local_auth:^2.3.0'
 
 rm -f test/widget_test.test.dart test/widget_test.dart
