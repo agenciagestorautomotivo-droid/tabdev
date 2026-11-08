@@ -91,10 +91,14 @@ class SettingsStore {
   Future<void> setAiDisabled(List<String> v) => _p.setStringList('ai_off', v);
   String get groqModel => _p.getString('groq_model') ?? 'llama-3.1-8b-instant';
   Future<void> setGroqModel(String v) => _p.setString('groq_model', v.trim().isEmpty ? 'llama-3.1-8b-instant' : v.trim());
-  String get openrouterModel =>
-      _p.getString('openrouter_model') ?? 'meta-llama/llama-3.3-70b-instruct:free';
+  String get openrouterModel {
+    final v = _p.getString('openrouter_model');
+    // O modelo grátis antigo saiu do ar (404); "openrouter/free" escolhe um grátis disponível.
+    if (v == null || v.isEmpty || v == 'meta-llama/llama-3.3-70b-instruct:free') return 'openrouter/free';
+    return v;
+  }
   Future<void> setOpenrouterModel(String v) => _p.setString(
-      'openrouter_model', v.trim().isEmpty ? 'meta-llama/llama-3.3-70b-instruct:free' : v.trim());
+      'openrouter_model', v.trim().isEmpty ? 'openrouter/free' : v.trim());
   String get libraryJson => _p.getString('library_v1') ?? '';
   Future<void> setLibraryJson(String v) => _p.setString('library_v1', v);
   String get connectorsJson => _s('connectors_v1').isEmpty ? '[]' : _s('connectors_v1');

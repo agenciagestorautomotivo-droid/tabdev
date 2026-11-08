@@ -157,7 +157,7 @@ class AiRouter {
           : 'Nenhuma IA configurada. Em CONFIG, cole ao menos uma chave (Groq ou Gemini são grátis).');
     }
 
-    Object? lastErr;
+    final errs = <String>[];
     for (var i = 0; i < chain.length; i++) {
       final p = chain[i];
       try {
@@ -168,10 +168,10 @@ class AiRouter {
         await brain.logEvent('ia', prompt.length > 80 ? prompt.substring(0, 80) : prompt);
         return res;
       } catch (e) {
-        lastErr = e;
+        errs.add('${p.id}: ${e.toString().replaceFirst('Exception: ', '')}');
       }
     }
-    throw Exception('Todas as IAs falharam (${lastErr.toString().replaceFirst('Exception: ', '')}).');
+    throw Exception('Todas as IAs falharam → ${errs.join(' | ')}');
   }
 
   /// Passo de agente: sem cache, resposta curta e precisa. O Gemini vai primeiro
@@ -194,16 +194,16 @@ class AiRouter {
       final p = byId(id);
       if (p != null && seen.add(p.id)) chain.add(p);
     }
-    Object? lastErr;
+    final errs = <String>[];
     for (final p in chain) {
       try {
         return await _chat(p, system, user,
             timeout: const Duration(seconds: 25), maxTokens: maxTokens, temperature: 0.2);
       } catch (e) {
-        lastErr = e;
+        errs.add('${p.id}: ${e.toString().replaceFirst('Exception: ', '')}');
       }
     }
-    throw Exception('Todas as IAs falharam (${lastErr.toString().replaceFirst('Exception: ', '')}).');
+    throw Exception('Todas as IAs falharam → ${errs.join(' | ')}');
   }
 
   Future<String> _chat(AiProvider p, String system, String user,
