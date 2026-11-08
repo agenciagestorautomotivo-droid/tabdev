@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,3 +28,10 @@ jobs:
         with:
           name: openexe-apk
           path: notia/build/app/outputs/flutter-apk/app-release.apk
+      - name: Publicar APK em Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp notia/build/app/outputs/flutter-apk/app-release.apk OpenEXE.apk
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest OpenEXE.apk --title "OpenEXE (APK mais recente)" --notes "Baixe o OpenEXE.apk e instale no tablet." --target "$GITHUB_SHA"
