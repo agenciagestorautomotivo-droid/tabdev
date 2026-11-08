@@ -101,6 +101,14 @@ class SettingsStore {
   bool get lockVault => _p.getBool('lock_vault') ?? false;
   Future<void> setLockVault(bool v) => _p.setBool('lock_vault', v);
 
+  // --- Atualização automática do OpenEXE (APK nos Releases do GitHub) ---
+  bool get autoUpdate => _p.getBool('auto_update') ?? true;
+  Future<void> setAutoUpdate(bool v) => _p.setBool('auto_update', v);
+  String get updateRepo => _p.getString('update_repo') ?? 'agenciagestorautomotivo-droid/tabdev';
+  Future<void> setUpdateRepo(String v) => _p.setString('update_repo', v.trim());
+  String get downloadedBuild => _p.getString('update_dl_build') ?? '';
+  Future<void> setDownloadedBuild(String v) => _p.setString('update_dl_build', v);
+
   // --- OpenEXE: dock v3 (até 5 pastas), repositórios, modo foco, imagens da área de transferência ---
   String? get dockV3Json => _p.getString('dock_v3');
   Future<void> setDockV3Json(String v) => _p.setString('dock_v3', v);

@@ -266,4 +266,46 @@ object SystemKit {
     } catch (_: Exception) {
         false
     }
+
+    // ---------- Atualização do app e troca de launcher ----------
+    /** Pasta onde o APK baixado é guardado (coberta pelo FileProvider). */
+    fun updateDir(ctx: Context): String = File(ctx.filesDir, "updates").apply { mkdirs() }.absolutePath
+
+    /**
+     * Abre o instalador do Android para o APK baixado. O Android sempre pede a confirmação
+     * do usuário; sem a permissão "instalar apps desconhecidos" abre a tela para liberar.
+     * Retorna "ok", "permissao" ou "erro".
+     */
+    fun installApk(ctx: Context, path: String): String = try {
+        if (!ctx.packageManager.canRequestPackageInstalls()) {
+            ctx.startActivity(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            "permissao"
+        } else {
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.clipprovider", File(path))
+            ctx.startActivity(
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            "ok"
+        }
+    } catch (_: Exception) {
+        "erro"
+    }
+
+    /** Tela do Android onde se escolhe o launcher padrão (para voltar ao launcher original). */
+    fun homeSettings(ctx: Context): Boolean = try {
+        ctx.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (_: Exception) {
+        try {
+            ctx.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
 }

@@ -162,4 +162,14 @@ class NativeBridge {
 
   static Future<bool> setClipImage(String path) async =>
       (await _call<bool>('clip.setImage', {'path': path})) ?? false;
+
+  // ----- Atualização e launcher -----
+  static Future<String?> updateDir() => _call<String>('update.dir');
+
+  /// "ok", "permissao" (abriu a tela para liberar) ou "erro".
+  static Future<String> installApk(String path) async =>
+      (await _call<String>('update.install', {'path': path})) ?? 'erro';
+
+  /// Abre a tela do Android para escolher o launcher padrão.
+  static Future<bool> homeSettings() async => (await _call<bool>('sys.homeSettings')) ?? false;
 }

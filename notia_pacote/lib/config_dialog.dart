@@ -1,3 +1,4 @@
+import 'services/update_service.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -20,6 +21,7 @@ Future<void> showConfigDialog(
   required DriveBackupService drive,
   required SupabaseSyncService sb,
   required DeviceKit kit,
+  required UpdateService update,
   required VoidCallback onChanged,
 }) async {
   final s = settings;
@@ -226,6 +228,55 @@ Future<void> showConfigDialog(
                     field(sbAnon, 'Chave anon', secret: true),
                     field(sbMail, 'E-mail'),
                     field(sbPass, 'Senha', secret: true),
+                    section('Atualização e launcher'),
+                    ListenableBuilder(
+                      listenable: update,
+                      builder: (c, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Versão instalada: ${update.currentBuild}', style: N.t(s: 12)),
+                        const SizedBox(height: 2),
+                        Text(
+                            update.state == UpdateState.downloading
+                                ? 'Baixando… ${(update.progress * 100).round()}%'
+                                : (update.message.isEmpty ? 'Toque em "Verificar agora".' : update.message),
+                            style: N.t(
+                                c: update.state == UpdateState.error
+                                    ? N.red
+                                    : (update.hasUpdate ? N.amber : N.dim),
+                                s: 12)),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('Baixar atualizações sozinho (no Wi-Fi)', style: N.t()),
+                          subtitle: Text(
+                              'O Android sempre pede um toque seu para confirmar a instalação.',
+                              style: N.t(c: N.dim, s: 11)),
+                          value: s.autoUpdate,
+                          activeColor: N.cyan,
+                          onChanged: (v) async {
+                            await s.setAutoUpdate(v);
+                            setD(() {});
+                          },
+                        ),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          NBtn('Verificar agora', onTap: () => update.check(wifi: true)),
+                          if (update.state == UpdateState.available)
+                            NBtn('Baixar', accent: true, onTap: update.download),
+                          if (update.state == UpdateState.ready)
+                            NBtn('Instalar atualização', accent: true, onTap: () async {
+                              final r = await update.install();
+                              setD(() => permMsg = r == 'permissao'
+                                  ? 'Libere "instalar apps desconhecidos" para o OpenEXE e toque em Instalar de novo.'
+                                  : '');
+                            }),
+                        ]),
+                        const SizedBox(height: 10),
+                        Text(
+                            'Para voltar ao launcher original do tablet, abra a tela do Android e escolha o '
+                            'app de tela inicial. Para voltar ao OpenEXE, repita e escolha OpenEXE.',
+                            style: N.t(c: N.dim, s: 11)),
+                        const SizedBox(height: 6),
+                        NBtn('Trocar launcher padrão do tablet', onTap: NativeBridge.homeSettings),
+                      ]),
+                    ),
                     section('Recursos do aparelho'),
                     Text(
                         'Controle de apps: ${a11yOn ? 'ATIVO' : 'desligado'}   ·   '

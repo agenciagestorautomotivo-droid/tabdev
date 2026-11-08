@@ -18,12 +18,16 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Chave de assinatura fixa (para o app poder se atualizar)
+        run: |
+          mkdir -p ~/.android
+          cp release.keystore ~/.android/debug.keystore
       - name: Montar e compilar
         run: |
           bash notia_pacote/setup.sh
           cd notia
           flutter pub get
-          flutter build apk --release --no-shrink
+          flutter build apk --release --no-shrink --build-number=${{ github.run_number }} --dart-define=BUILD_ID=${{ github.sha }}
       - uses: actions/upload-artifact@v4
         with:
           name: openexe-apk
@@ -34,4 +38,4 @@ jobs:
         run: |
           cp notia/build/app/outputs/flutter-apk/app-release.apk OpenEXE.apk
           gh release delete apk-latest --yes --cleanup-tag || true
-          gh release create apk-latest OpenEXE.apk --title "OpenEXE (APK mais recente)" --notes "Baixe o OpenEXE.apk e instale no tablet." --target "$GITHUB_SHA"
+          gh release create apk-latest OpenEXE.apk --title "OpenEXE (APK mais recente)" --notes "build:$GITHUB_SHA" --target "$GITHUB_SHA"

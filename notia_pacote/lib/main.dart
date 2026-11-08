@@ -40,6 +40,7 @@ import 'services/supabase_sync_service.dart';
 import 'services/system_monitor_service.dart';
 import 'services/tasks_service.dart';
 import 'services/text_utils.dart';
+import 'services/update_service.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -133,6 +134,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   final KeyboardMode _kbd = KeyboardMode();
   final TasksService _tasks = TasksService();
   late final RepoStore _repos = RepoStore(widget.settings);
+  late final UpdateService _update = UpdateService(widget.settings);
 
   StreamSubscription? _events;
   Timer? _placeTimer;
@@ -186,6 +188,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   Future<void> _initOpenExe() async {
     _dock.refresh();
+    _update.start();
+    _update.addListener(_onUpdate);
+    Future<void>.delayed(const Duration(seconds: 8), () => _update.check(wifi: _wifi));
     _monitor.start();
     await _kbd.init();
     await _tasks.load();
@@ -199,6 +204,27 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     NativeBridge.events.where((e) => e['type'] == 'bt').listen((e) {
       if (mounted) setState(() => _btOn = e['on'] == true);
     });
+  }
+
+  UpdateState _lastUpd = UpdateState.idle;
+  void _onUpdate() {
+    if (!mounted) return;
+    if (_update.state == UpdateState.ready && _lastUpd != UpdateState.ready) {
+      _toast('Atualização do OpenEXE pronta. Toque em ATUALIZAR no topo para instalar.');
+    }
+    _lastUpd = _update.state;
+    setState(() {});
+  }
+
+  Future<void> _installUpdate() async {
+    if (_update.state == UpdateState.available) {
+      await _update.download();
+      return;
+    }
+    final r = await _update.install();
+    if (r == 'permissao') {
+      _toast('Libere "instalar apps desconhecidos" para o OpenEXE e toque em ATUALIZAR de novo.');
+    }
   }
 
   Future<void> _refreshNext() async {
@@ -219,6 +245,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         setState(() {
           _online = ok(r);
           _wifi = wifi(r);
+          _update.setWifi(_wifi);
         });
       }
     } catch (_) {}
@@ -227,6 +254,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         setState(() {
           _online = ok(r);
           _wifi = wifi(r);
+          _update.setWifi(_wifi);
         });
       }
     });
@@ -319,6 +347,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     _placeTimer?.cancel();
     _routines.dispose();
     _power.dispose();
+    _update.removeListener(_onUpdate);
+    _update.disposeTimer();
     _monitor.dispose();
     _kbd.dispose();
     _dock.dispose();
@@ -342,6 +372,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       // Backup automático só no Wi-Fi e com carregador ou bateria acima de 30%.
       if (_power.backupOk(_wifi)) _drive.maybeAutoBackup();
       _dock.refresh();
+      _update.check(wifi: _wifi);
       _routines.tick();
       _checkPlace();
       _tasks.load();
@@ -1035,6 +1066,22 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             builder: (c, v, _) => _stat('VOZ', v, v == 'PRONTA' ? N.green : N.amber),
           ),
           const SizedBox(width: 12),
+          if (_update.hasUpdate) ...[
+            InkWell(
+              onTap: _installUpdate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    border: Border.all(color: N.amber), borderRadius: BorderRadius.circular(4)),
+                child: Text(
+                    _update.state == UpdateState.downloading
+                        ? 'BAIXANDO ${(_update.progress * 100).round()}%'
+                        : (_update.state == UpdateState.ready ? 'ATUALIZAR' : 'BAIXAR ATUALIZAÇÃO'),
+                    style: N.t(c: N.amber, s: 11, w: FontWeight.w700)),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           InkWell(
             onTap: _openConfig,
             child: Padding(
@@ -1436,6 +1483,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       drive: _drive,
       sb: _sb,
       kit: _kit,
+      update: _update,
       onChanged: () {
         if (mounted) setState(() {});
       },

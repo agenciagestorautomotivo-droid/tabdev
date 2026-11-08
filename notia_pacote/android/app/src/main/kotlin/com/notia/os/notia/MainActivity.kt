@@ -103,6 +103,9 @@ class MainActivity : FlutterFragmentActivity() {
             "app.quick" -> result.success(SystemKit.quick(this, call.argument<String>("which") ?: ""))
             "app.uninstall" -> result.success(SystemKit.uninstall(this, call.argument<String>("pkg") ?: ""))
             "app.info" -> result.success(SystemKit.appInfo(this, call.argument<String>("pkg") ?: ""))
+            "update.dir" -> result.success(SystemKit.updateDir(this))
+            "update.install" -> result.success(SystemKit.installApk(this, call.argument<String>("path") ?: ""))
+            "sys.homeSettings" -> result.success(SystemKit.homeSettings(this))
             "clip.image" -> result.success(SystemKit.clipImage(this))
             "clip.setImage" -> result.success(SystemKit.setClipImage(this, call.argument<String>("path") ?: ""))
 
