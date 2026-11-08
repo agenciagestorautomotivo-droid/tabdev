@@ -13,7 +13,9 @@ import 'panels/apps_panel.dart';
 import 'panels/brain_panel.dart';
 import 'panels/console_panel.dart';
 import 'panels/dock_panel.dart';
+import 'lock_screen.dart';
 import 'services/ai_router.dart';
+import 'services/ai_task_service.dart';
 import 'services/app_agent_service.dart';
 import 'services/clipboard_history_service.dart';
 import 'services/device_kit.dart';
@@ -41,6 +43,7 @@ import 'services/system_monitor_service.dart';
 import 'services/tasks_service.dart';
 import 'services/text_utils.dart';
 import 'services/update_service.dart';
+import 'services/voice_service.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -146,6 +149,19 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   Map<String, dynamic>? _nextEvent;
 
   final _voiceStatus = ValueNotifier<String>('PRONTA');
+  final VoiceService _voice = VoiceService();
+  final AiTaskService _aiTasks = AiTaskService();
+  late final WakeWordService _wake = WakeWordService(
+    _voice,
+    widget.settings,
+    (cmd) {
+      _console?.say('Voz: $cmd', color: N.cyan);
+      _console?.ask(cmd);
+    },
+    () => _console?.toggleMic(),
+  );
+  DateTime? _alarmAt;
+  bool _locked = false;
   final _consoleKey = GlobalKey<ConsolePanelState>();
   final _dockKey = GlobalKey<DockPanelState>();
   final _hubKey = GlobalKey<AiHubPanelState>();
@@ -170,9 +186,11 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
+    _locked = widget.settings.osLock;
     _initNet();
     _initDevice();
     _initOpenExe();
+    _initAi();
     _sb.onNotification = (m) {
       _consoleKey.currentState?.say('Cloud: $m', color: N.amber);
       _consoleKey.currentState?.speak(m);
@@ -200,10 +218,63 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     _minuteTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _refreshNext();
       _tasks.load();
+      _refreshAlarm();
     });
     NativeBridge.events.where((e) => e['type'] == 'bt').listen((e) {
       if (mounted) setState(() => _btOn = e['on'] == true);
     });
+  }
+
+  void _initAi() {
+    NativeBridge.voiceConfirm = _voice.yesNo;
+    NativeBridge.voiceStop = _voice.stop;
+    _media.translator = (t) => _router.complete(
+        'Translate the user text to concise English for a music generator. Reply with only the translation.',
+        t,
+        maxTokens: 120);
+    _kit.agent.onProgress = (step, max, msg) {
+      _aiTasks.upsert('agent', 'Agente de apps',
+          detail: msg,
+          progress: max > 0 && step > 0 ? (step / max).clamp(0.0, 1.0) : null,
+          onStop: () => _console?.ask('parar'));
+      NativeBridge.keepAlive(true);
+    };
+    _kit.agent.onDone = () {
+      _aiTasks.finish('agent', result: 'Agente de apps concluído');
+      _syncKeepAlive();
+    };
+    _syncWake();
+    _syncKeepAlive();
+    _refreshAlarm();
+  }
+
+  /// Liga/desliga a palavra de ativação conforme a configuração.
+  void _syncWake() {
+    if (widget.settings.wakeOn) {
+      _wake.start();
+    } else {
+      _wake.stop();
+    }
+    _syncKeepAlive();
+  }
+
+  void _syncKeepAlive() {
+    NativeBridge.keepAlive(widget.settings.keepAlive || widget.settings.wakeOn || _kit.agent.running);
+  }
+
+  Future<void> _refreshAlarm() async {
+    final a = await NativeBridge.nextAlarm();
+    if (mounted) setState(() => _alarmAt = a);
+  }
+
+  String get _alarmText {
+    final a = _alarmAt;
+    if (a == null) return '--:--';
+    final hh = a.hour.toString().padLeft(2, '0');
+    final mm = a.minute.toString().padLeft(2, '0');
+    final today = DateTime.now();
+    final same = a.year == today.year && a.month == today.month && a.day == today.day;
+    return same ? '$hh:$mm' : '$hh:$mm ${a.day.toString().padLeft(2, '0')}/${a.month.toString().padLeft(2, '0')}';
   }
 
   UpdateState _lastUpd = UpdateState.idle;
@@ -211,6 +282,12 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     if (!mounted) return;
     if (_update.state == UpdateState.ready && _lastUpd != UpdateState.ready) {
       _toast('Atualização do OpenEXE pronta. Toque em ATUALIZAR no topo para instalar.');
+    }
+    if (_update.state == UpdateState.downloading) {
+      _aiTasks.upsert('update', 'Baixando atualização do OpenEXE',
+          progress: _update.progress > 0 ? _update.progress : null);
+    } else {
+      _aiTasks.finish('update', result: _update.state == UpdateState.ready ? 'Atualização baixada' : null);
     }
     _lastUpd = _update.state;
     setState(() {});
@@ -349,6 +426,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     _power.dispose();
     _update.removeListener(_onUpdate);
     _update.disposeTimer();
+    _wake.stop();
+    _voice.dispose();
+    _aiTasks.dispose();
     _monitor.dispose();
     _kbd.dispose();
     _dock.dispose();
@@ -361,6 +441,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     final resumed = state == AppLifecycleState.resumed;
     _sys.invokeMethod(resumed ? 'resumeWebTimers' : 'pauseWebTimers').catchError((_) {});
     if (!resumed) {
+      _wake.stop();
       _monitor.stop();
       _pausedAt ??= DateTime.now();
     } else {
@@ -368,6 +449,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       final away = _pausedAt == null ? Duration.zero : DateTime.now().difference(_pausedAt!);
       _pausedAt = null;
       if (widget.settings.lockVault && away.inMinutes >= 5) _vaultLocked = true;
+      if (widget.settings.osLock && away.inMinutes >= widget.settings.osLockMin) _locked = true;
+      _refreshAlarm();
+      _syncWake();
       widget.brain.syncFromVault();
       // Backup automático só no Wi-Fi e com carregador ou bateria acima de 30%.
       if (_power.backupOk(_wifi)) _drive.maybeAutoBackup();
@@ -403,13 +487,17 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   void _openHub(String category, String prompt) {
     Clipboard.setData(ClipboardData(text: prompt));
+    setState(() => _openRight = 1);
     _hubKey.currentState?.showCategory(category);
   }
 
   Future<void> _syncCloud() async {
     final c = _consoleKey.currentState;
     c?.say('Sincronizando com o Drive…');
+    _aiTasks.upsert('drive', 'Backup no Google Drive');
     final r = await _drive.backup();
+    _aiTasks.finish('drive',
+        result: r != null ? 'Backup no Drive concluído' : 'Backup no Drive falhou', failed: r == null);
     c?.say(r ?? 'Drive: ${_drive.lastError}', color: r != null ? N.green : N.red);
     if (_sb.configured) _sb.backup();
   }
@@ -890,7 +978,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   }
 
   // ---------- Módulos ----------
-  Widget _module(int id) {
+  Widget _module(int id, {bool open = true, VoidCallback? onToggle}) {
     switch (id) {
       case 0:
         return QuadFrame(
@@ -901,7 +989,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             router: _router,
             settings: widget.settings,
             voiceStatus: _voiceStatus,
-            onOpenUrl: (u) => _dockKey.currentState?.openUrl(u),
+            onOpenUrl: (u) {
+              setState(() => _openRight = 3);
+              _dockKey.currentState?.openUrl(u);
+            },
             onOpenHub: _openHub,
             onLaunchApp: (n) async => await _dockKey.currentState?.launchByName(n),
             onInstallApp: (n) => _dockKey.currentState?.openStore(n),
@@ -912,11 +1003,15 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             media: _media,
             kit: _kit,
             keyboard: _kbd,
+            voice: _voice,
+            tasks: _aiTasks,
           ),
         );
       case 1:
         return QuadFrame(
           title: 'Q2 · HUB DE IAS',
+          open: open,
+          onToggle: onToggle,
           child: AiHubPanel(
             key: _hubKey,
             settings: widget.settings,
@@ -949,6 +1044,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       case 3:
         return QuadFrame(
           title: 'Q4 · DOCK E NAVEGADOR',
+          open: open,
+          onToggle: onToggle,
           child: DockPanel(
             key: _dockKey,
             model: _dock,
@@ -966,6 +1063,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       default:
         return QuadFrame(
           title: 'Q5 · APPS INSTALADOS',
+          open: open,
+          onToggle: onToggle,
           child: AppsPanel(model: _dock, onStore: () => _dockKey.currentState?.openStore()),
         );
     }
@@ -973,8 +1072,29 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   int _flex(double v) => (v * 1000).round().clamp(1, 100000);
 
+  /// Coluna da direita em sanfona: só um módulo aberto por vez (Dock por padrão).
+  int _openRight = 3;
+
+  Widget _accordion() {
+    final ids = _slots.sublist(2);
+    final open = (_openRight == -1 || ids.contains(_openRight)) ? _openRight : ids.first;
+    const head = 37.0;
+    return LayoutBuilder(builder: (c, box) {
+      final closed = ids.where((m) => m != open).length;
+      final openH = (box.maxHeight - head * closed).clamp(head, box.maxHeight);
+      return Column(children: [
+        for (final m in ids)
+          SizedBox(
+            key: ValueKey('acc$m'),
+            height: m == open ? openH : head,
+            child: _module(m,
+                open: m == open, onToggle: () => setState(() => _openRight = m == open ? -1 : m)),
+          ),
+      ]);
+    });
+  }
+
   Widget _body() {
-    final rc = (1 - _ra - _rb).clamp(0.15, 0.7);
     return Row(
       children: [
         Expanded(
@@ -984,14 +1104,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             Expanded(flex: _flex(1 - _left), child: _module(_slots[1])),
           ]),
         ),
-        Expanded(
-          flex: _flex(1 - _col),
-          child: Column(children: [
-            Expanded(flex: _flex(_ra), child: _module(_slots[2])),
-            Expanded(flex: _flex(_rb), child: _module(_slots[3])),
-            Expanded(flex: _flex(rc), child: _module(_slots[4])),
-          ]),
-        ),
+        Expanded(flex: _flex(1 - _col), child: _accordion()),
       ],
     );
   }
@@ -1048,7 +1161,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             const Icon(Icons.bluetooth, size: 16, color: _blue),
           ],
           _gap(),
-          _stat('ALARME', widget.settings.alarmLabel, N.amber),
+          _stat('ALARME', _alarmText, N.amber),
           _gap(),
           _stat('AGENDA', agenda, ev == null ? N.dim : N.amber),
           _gap(),
@@ -1304,6 +1417,76 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     );
   }
 
+  /// Barra de tarefas da IA: mostra o que está rodando, andamento e botão de parar.
+  Widget _taskBar() {
+    return ListenableBuilder(
+      listenable: _aiTasks,
+      builder: (context, _) {
+        final act = _aiTasks.active;
+        final t = act.isEmpty ? null : act.first;
+        final prog = t?.progress;
+        return Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: N.line2), bottom: BorderSide(color: N.line2)),
+          ),
+          child: Row(children: [
+            Text('TAREFA IA', style: N.t(c: t == null ? N.dim : N.cyan, s: 11, w: FontWeight.w700, ls: 1)),
+            const SizedBox(width: 12),
+            if (t == null)
+              Expanded(
+                child: Text(
+                  _aiTasks.lastDone.isEmpty ? 'Nenhuma tarefa em andamento.' : 'Última: ${_aiTasks.lastDone}',
+                  style: N.t(c: _aiTasks.lastFailed ? N.red : N.dim, s: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              )
+            else ...[
+              Flexible(
+                flex: 3,
+                child: Text(
+                  t.detail.isEmpty ? t.title : '${t.title} · ${t.detail}',
+                  style: N.t(c: N.text, s: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: prog,
+                    minHeight: 6,
+                    backgroundColor: N.line2,
+                    valueColor: const AlwaysStoppedAnimation(N.cyan),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 38,
+                child: Text(prog == null ? '…' : '${(prog * 100).round()}%',
+                    style: N.t(c: N.cyan, s: 12, w: FontWeight.w700), textAlign: TextAlign.right),
+              ),
+              if (act.length > 1)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text('+${act.length - 1}', style: N.t(c: N.amber, s: 12, w: FontWeight.w700)),
+                ),
+              if (t.onStop != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: NBtn('PARAR', onTap: t.onStop!),
+                ),
+            ],
+          ]),
+        );
+      },
+    );
+  }
+
   Widget _productivity() => Container(
         height: 84,
         padding: const EdgeInsets.fromLTRB(12, 8, 6, 4),
@@ -1384,14 +1567,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                     const SizedBox(height: 12),
                     slider('Largura da coluna esquerda', col, 0.3, 0.7, (x) => col = x),
                     slider('Altura do módulo esquerdo de cima', left, 0.25, 0.75, (x) => left = x),
-                    slider('Altura do módulo direito de cima', ra, 0.15, 0.55, (x) {
-                      ra = x;
-                      if (ra + rb > 0.85) rb = 0.85 - ra;
-                    }),
-                    slider('Altura do módulo direito do meio', rb, 0.15, 0.55, (x) {
-                      rb = x;
-                      if (ra + rb > 0.85) ra = 0.85 - rb;
-                    }),
                     const SizedBox(height: 8),
                     for (var i = 0; i < 5; i++)
                       Padding(
@@ -1488,6 +1663,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         if (mounted) setState(() {});
       },
     );
+    _syncWake();
   }
 
   @override
@@ -1506,16 +1682,36 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         child: Scaffold(
           backgroundColor: N.bg,
           resizeToAvoidBottomInset: false,
-          body: SafeArea(
-            child: Column(
-              children: [
-                _statusRow(),
-                _cmdBar(),
-                Expanded(child: _body()),
-                _productivity(),
-                _footerButtons(),
-              ],
-            ),
+          body: Stack(
+            children: [
+              SafeArea(
+                child: Column(
+                  children: [
+                    _statusRow(),
+                    _cmdBar(),
+                    Expanded(child: _body()),
+                    _taskBar(),
+                    _productivity(),
+                    _footerButtons(),
+                  ],
+                ),
+              ),
+              if (_locked)
+                Positioned.fill(
+                  child: LockScreen(
+                    now: _now,
+                    nextEvent: _nextEvent == null
+                        ? ''
+                        : '${clip('${_nextEvent!['title']}', 40)} · ${LocalCalendarService.until(_nextEvent!['begin'] as DateTime)}',
+                    notifCount: _kit.notifs.items.length,
+                    onUnlock: () async {
+                      final ok = await _kit.lock.authenticate('Desbloquear o OpenEXE');
+                      if (ok && mounted) setState(() => _locked = false);
+                      return ok;
+                    },
+                  ),
+                ),
+            ],
           ),
         ),
       ),

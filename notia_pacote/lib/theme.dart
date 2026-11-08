@@ -68,36 +68,53 @@ class NBtn extends StatelessWidget {
 
 /// Moldura de um quadrante: título + área de conteúdo.
 class QuadFrame extends StatelessWidget {
-  const QuadFrame({super.key, required this.title, required this.child, this.trailing});
+  const QuadFrame({
+    super.key,
+    required this.title,
+    required this.child,
+    this.trailing,
+    this.open = true,
+    this.onToggle,
+  });
   final String title;
   final Widget child;
   final Widget? trailing;
 
+  /// Modo sanfona: quando [onToggle] existe, o título vira botão e o conteúdo some se [open] for falso.
+  /// O conteúdo continua vivo (só escondido), então WebViews e estado não se perdem.
+  final bool open;
+  final VoidCallback? onToggle;
+
   @override
   Widget build(BuildContext context) {
+    final head = Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: open ? const Border(bottom: BorderSide(color: N.line2)) : null,
+      ),
+      child: Row(
+        children: [
+          if (onToggle != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Icon(open ? Icons.expand_more : Icons.chevron_right, size: 18, color: N.cyan),
+            ),
+          Expanded(
+              child: Text(title,
+                  style: N.t(c: N.cyan, w: FontWeight.w700), overflow: TextOverflow.ellipsis)),
+          if (trailing != null && open) trailing!,
+        ],
+      ),
+    );
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: N.line, width: 0.5),
       ),
       child: Column(
         children: [
-          Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: N.line2)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                    child: Text(title,
-                        style: N.t(c: N.cyan, w: FontWeight.w700),
-                        overflow: TextOverflow.ellipsis)),
-                if (trailing != null) trailing!,
-              ],
-            ),
-          ),
-          Expanded(child: ClipRect(child: child)),
+          onToggle == null ? head : InkWell(onTap: onToggle, child: head),
+          Expanded(child: Offstage(offstage: !open, child: ClipRect(child: child))),
         ],
       ),
     );

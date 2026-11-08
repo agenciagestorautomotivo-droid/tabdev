@@ -18,6 +18,10 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- A foto é feita pelo app de câmera do sistema, então CAMERA não é declarada. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -64,6 +68,11 @@
         </activity>
 
         <!-- Agente de apps: ver e operar a tela de outros apps -->
+        <service
+            android:name=".KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <service
             android:name=".NotiaAccessibilityService"
             android:exported="true"

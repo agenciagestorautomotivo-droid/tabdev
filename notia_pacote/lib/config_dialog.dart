@@ -27,6 +27,7 @@ Future<void> showConfigDialog(
   final s = settings;
   final name = TextEditingController(text: await brain.getKv('usuario_nome') ?? '');
   final groq = TextEditingController(text: s.groqKey);
+  final wakeWords = TextEditingController(text: s.wakeWords);
   final gem = TextEditingController(text: s.geminiKey);
   final gemModel = TextEditingController(text: s.geminiModel);
   final orr = TextEditingController(text: s.openrouterKey);
@@ -103,6 +104,7 @@ Future<void> showConfigDialog(
                   const SizedBox(width: 8),
                   NBtn('Salvar', accent: true, onTap: () async {
                     await s.setGroqKey(groq.text);
+                    await s.setWakeWords(wakeWords.text.trim().isEmpty ? 'ei exe, open exe' : wakeWords.text);
                     await s.setGeminiKey(gem.text);
                     await s.setGeminiModel(gemModel.text.trim().isEmpty ? 'gemini-2.5-flash' : gemModel.text);
                     await s.setOpenrouterKey(orr.text);
@@ -277,6 +279,65 @@ Future<void> showConfigDialog(
                         NBtn('Trocar launcher padrão do tablet', onTap: NativeBridge.homeSettings),
                       ]),
                     ),
+                    section('Voz, segundo plano e bloqueio'),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Palavra de ativação (microfone sempre atento)', style: N.t()),
+                      subtitle: Text(
+                          'Diga a palavra e o pedido: "ei exe, abre o WhatsApp". Gasta bateria e o Android pode '
+                          'tocar um sinal a cada ciclo. Funciona com o OpenEXE aberto ou com o modo segundo plano.',
+                          style: N.t(c: N.dim, s: 11)),
+                      value: s.wakeOn,
+                      activeColor: N.cyan,
+                      onChanged: (v) async {
+                        if (v) {
+                          final r = await Permission.microphone.request();
+                          if (!r.isGranted) return;
+                        }
+                        await s.setWakeOn(v);
+                        onChanged();
+                        setD(() {});
+                      },
+                    ),
+                    field(wakeWords, 'Palavras de ativação (separe por vírgula)'),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Manter OpenEXE ativo em segundo plano', style: N.t()),
+                      subtitle: Text(
+                          'Mostra uma notificação fixa "OpenEXE ativo" para o Android não encerrar o app.',
+                          style: N.t(c: N.dim, s: 11)),
+                      value: s.keepAlive,
+                      activeColor: N.cyan,
+                      onChanged: (v) async {
+                        await s.setKeepAlive(v);
+                        onChanged();
+                        setD(() {});
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Tela de bloqueio do OpenEXE', style: N.t()),
+                      subtitle: Text(
+                          'Camada extra por cima do launcher (digital/PIN do aparelho). Não substitui o bloqueio do Android.',
+                          style: N.t(c: N.dim, s: 11)),
+                      value: s.osLock,
+                      activeColor: N.cyan,
+                      onChanged: (v) async {
+                        await s.setOsLock(v);
+                        setD(() {});
+                      },
+                    ),
+                    if (s.osLock)
+                      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        Text('Bloquear após ficar fora por:', style: N.t(c: N.dim, s: 12)),
+                        for (final m in [0, 1, 5, 15])
+                          NBtn(m == 0 ? 'Sempre' : '$m min',
+                              accent: s.osLockMin == m,
+                              onTap: () async {
+                                await s.setOsLockMin(m);
+                                setD(() {});
+                              }),
+                      ]),
                     section('Recursos do aparelho'),
                     Text(
                         'Controle de apps: ${a11yOn ? 'ATIVO' : 'desligado'}   ·   '

@@ -103,6 +103,17 @@ class MainActivity : FlutterFragmentActivity() {
             "app.quick" -> result.success(SystemKit.quick(this, call.argument<String>("which") ?: ""))
             "app.uninstall" -> result.success(SystemKit.uninstall(this, call.argument<String>("pkg") ?: ""))
             "app.info" -> result.success(SystemKit.appInfo(this, call.argument<String>("pkg") ?: ""))
+            "alarm.set" -> result.success(
+                SystemKit.setAlarm(
+                    this,
+                    call.argument<Int>("hour") ?: 7,
+                    call.argument<Int>("minute") ?: 0,
+                    call.argument<String>("label") ?: "OpenEXE"
+                )
+            )
+            "alarm.next" -> result.success(SystemKit.nextAlarm(this))
+            "keepalive" -> result.success(SystemKit.keepAlive(this, call.argument<Boolean>("on") ?: false))
+            "a11y.hideConfirm" -> { svc?.hideConfirm(); result.success(null) }
             "update.dir" -> result.success(SystemKit.updateDir(this))
             "update.install" -> result.success(SystemKit.installApk(this, call.argument<String>("path") ?: ""))
             "sys.homeSettings" -> result.success(SystemKit.homeSettings(this))

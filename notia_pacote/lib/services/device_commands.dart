@@ -38,6 +38,7 @@ class DeviceCommands {
 • agenda do aparelho · clip [texto] · compartilhar para o Notia (menu do Android)
 • rotina: 07:00 resumir minha agenda · rotinas · rotina remover N
 • lugar salvar casa · lugares · rotina: local casa => ...
+• alarme 07:30 [nome] · próximo alarme (usa o Relógio do Android; toca com o app fechado)
 • aparelho (status das permissões)''';
 
   Future<bool> handle(String text) async {
@@ -221,6 +222,33 @@ class DeviceCommands {
       final r = (q == null || q.isEmpty) ? kit.clip.latest() : kit.clip.search(q);
       say(r.isEmpty ? 'Nada no histórico${kit.clip.enabled ? '' : ' (desligado em CONFIG)'}.' : r.map((e) => '• ${clip(e.replaceAll('\n', ' '), 100)}').join('\n'),
           color: N.text);
+      return true;
+    }
+
+    // ----- Despertador (Relógio do Android) -----
+    final al = RegExp(r'^(?:alarme|despertador|me acorde|acorde me)\s*(?:para|as|a|às)?\s*(\d{1,2})(?:[:h](\d{2}))?\s*h?\s*(.*)$')
+        .firstMatch(l);
+    if (al != null) {
+      final h = int.parse(al.group(1)!);
+      final m = int.tryParse(al.group(2) ?? '0') ?? 0;
+      if (h > 23 || m > 59) {
+        say('Horário inválido. Ex.: alarme 07:30 academia', color: N.amber);
+        return true;
+      }
+      final label = al.group(3)!.trim().isEmpty ? 'OpenEXE' : al.group(3)!.trim();
+      final ok = await NativeBridge.setAlarm(h, m, label);
+      say(ok
+          ? 'Alarme criado para ${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} ($label). Ele toca pelo Relógio do Android, mesmo com o OpenEXE fechado.'
+          : 'Não consegui criar o alarme. Abra o app Relógio uma vez e tente de novo.',
+          color: ok ? N.green : N.red);
+      return true;
+    }
+    if (l == 'proximo alarme' || l == 'alarmes' || l == 'alarme') {
+      final n = await NativeBridge.nextAlarm();
+      say(n == null
+          ? 'Nenhum alarme ativo. Crie com: alarme 07:30'
+          : 'Próximo alarme: ${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')} (${n.day}/${n.month}).',
+          color: N.cyan);
       return true;
     }
 

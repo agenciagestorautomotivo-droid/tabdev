@@ -1,17 +1,60 @@
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Preferências locais (pasta privada do app): chaves, dock, hub, layout.
 class SettingsStore {
-  SettingsStore._(this._p);
+  SettingsStore._(this._p, this._vault, this._sec);
   final SharedPreferences _p;
+  final FlutterSecureStorage _vault;
+  final Map<String, String> _sec;
 
-  static Future<SettingsStore> load() async =>
-      SettingsStore._(await SharedPreferences.getInstance());
+  /// Chaves e senhas ficam no armazenamento seguro do Android (criptografado pelo Keystore).
+  static const _secretKeys = {
+    'groq_key', 'openrouter_key', 'gemini_key', 'hf_token', 'gh_token', 'sb_anon', 'sb_pass',
+    'custom_providers',
+  };
 
-  String _s(String k) => _p.getString(k) ?? '';
-  Future<void> _set(String k, String v) => _p.setString(k, v.trim());
+  static Future<SettingsStore> load() async {
+    final p = await SharedPreferences.getInstance();
+    const st = FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
+    var sec = <String, String>{};
+    try {
+      sec = await st.readAll();
+    } catch (_) {}
+    // Migra o que já estava salvo em texto simples.
+    for (final k in _secretKeys) {
+      final old = p.getString(k);
+      if (old != null && old.isNotEmpty && !sec.containsKey(k)) {
+        try {
+          await st.write(key: k, value: old);
+          sec[k] = old;
+          await p.remove(k);
+        } catch (_) {}
+      }
+    }
+    return SettingsStore._(p, st, sec);
+  }
+
+  String _s(String k) =>
+      _secretKeys.contains(k) ? (_sec[k] ?? _p.getString(k) ?? '') : (_p.getString(k) ?? '');
+
+  Future<void> _set(String k, String v) => _write(k, v.trim());
+
+  Future<void> _write(String k, String v) async {
+    if (_secretKeys.contains(k)) {
+      _sec[k] = v;
+      try {
+        await _vault.write(key: k, value: v);
+        await _p.remove(k);
+      } catch (_) {
+        await _p.setString(k, v); // sem armazenamento seguro, mantém o comportamento antigo
+      }
+    } else {
+      await _p.setString(k, v);
+    }
+  }
 
   // --- Provedores de IA ---
   String get groqKey => _s('groq_key');
@@ -32,7 +75,7 @@ class SettingsStore {
   /// Provedores próprios compatíveis com a API OpenAI: [{name, baseUrl, model, key}].
   List<Map<String, String>> get customProviders {
     try {
-      final l = jsonDecode(_p.getString('custom_providers') ?? '[]') as List;
+      final l = jsonDecode(_s('custom_providers').isEmpty ? '[]' : _s('custom_providers')) as List;
       return [for (final e in l) Map<String, String>.from(e as Map)];
     } catch (_) {
       return [];
@@ -40,7 +83,7 @@ class SettingsStore {
   }
 
   Future<void> setCustomProviders(List<Map<String, String>> v) =>
-      _p.setString('custom_providers', jsonEncode(v));
+      _write('custom_providers', jsonEncode(v));
 
   // --- GitHub ---
   String get ghToken => _s('gh_token');
@@ -52,12 +95,12 @@ class SettingsStore {
   String get sbUrl => _s('sb_url');
   String get sbAnonKey => _s('sb_anon');
   String get sbEmail => _s('sb_email');
-  String get sbPassword => _p.getString('sb_pass') ?? '';
+  String get sbPassword => _s('sb_pass');
   Future<void> setSupabase(String url, String anon, String email, String pass) async {
     await _set('sb_url', url);
     await _set('sb_anon', anon);
     await _set('sb_email', email);
-    await _p.setString('sb_pass', pass);
+    await _write('sb_pass', pass);
   }
 
   // --- Google Drive ---
@@ -100,6 +143,18 @@ class SettingsStore {
   Future<void> setLockConfig(bool v) => _p.setBool('lock_config', v);
   bool get lockVault => _p.getBool('lock_vault') ?? false;
   Future<void> setLockVault(bool v) => _p.setBool('lock_vault', v);
+
+  // --- Voz, segundo plano e tela de bloqueio ---
+  bool get wakeOn => _p.getBool('wake_on') ?? false;
+  Future<void> setWakeOn(bool v) => _p.setBool('wake_on', v);
+  String get wakeWords => _p.getString('wake_words') ?? 'ei exe, ei notia, open exe, openexe, ok notia';
+  Future<void> setWakeWords(String v) => _p.setString('wake_words', v.trim());
+  bool get keepAlive => _p.getBool('keep_alive') ?? false;
+  Future<void> setKeepAlive(bool v) => _p.setBool('keep_alive', v);
+  bool get osLock => _p.getBool('os_lock') ?? false;
+  Future<void> setOsLock(bool v) => _p.setBool('os_lock', v);
+  int get osLockMin => _p.getInt('os_lock_min') ?? 1;
+  Future<void> setOsLockMin(int v) => _p.setInt('os_lock_min', v);
 
   // --- Atualização automática do OpenEXE (APK nos Releases do GitHub) ---
   bool get autoUpdate => _p.getBool('auto_update') ?? true;

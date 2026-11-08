@@ -16,6 +16,10 @@ class AppAgentService {
 
   bool running = false;
   bool _stop = false;
+
+  /// Progresso para a barra de tarefas da IA: (passo, máximo, texto).
+  void Function(int step, int max, String msg)? onProgress;
+  void Function()? onDone;
   String lastError = '';
 
   void stop() => _stop = true;
@@ -78,6 +82,13 @@ depois da sua ação, tente outra coisa; quando concluir, responda fim.''';
     }
     running = true;
     _stop = false;
+    var cur = 0;
+    final rawLog = log;
+    log = (m) {
+      rawLog(m);
+      onProgress?.call(cur, maxSteps, m.replaceFirst(RegExp(r'^passo \d+: '), ''));
+    };
+    onProgress?.call(0, maxSteps, 'Iniciando');
     lastError = '';
     final history = <String>[];
     var emptyCount = 0;
@@ -96,6 +107,8 @@ depois da sua ação, tente outra coisa; quando concluir, responda fim.''';
       }
 
       for (var step = 1; step <= maxSteps; step++) {
+        cur = step;
+        onProgress?.call(step, maxSteps, 'Lendo a tela');
         if (_stop) return 'Parei a pedido seu.';
         final snap = await NativeBridge.snapshot();
         if (snap == null) return 'Não consegui ler a tela.';
@@ -212,6 +225,7 @@ depois da sua ação, tente outra coisa; quando concluir, responda fim.''';
       rethrow;
     } finally {
       running = false;
+      onDone?.call();
       await NativeBridge.overlay('', show: false);
       await NativeBridge.home();
     }

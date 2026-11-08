@@ -177,3 +177,15 @@ Este código foi escrito sem acesso ao Flutter SDK, então a primeira compilaç�
 - Bloqueio de imagens no navegador é por CSS/JS; o WebView do Flutter não intercepta sub-recursos.
 - Música: o prompt vai como você digitou; o MusicGen entende melhor inglês.
 - Pacotes Android dos atalhos de IA podem estar desatualizados; nesse caso abre o site.
+
+## Novidades (marco 4)
+
+- **Launcher padrão:** Ajustes do Android > Apps > Apps padrão > App de início > OpenEXE (ou aperte Home e escolha "Sempre"). Também em CONFIG > "Trocar launcher padrão do tablet".
+- **Atualização automática:** CONFIG > Atualização. Baixa o APK do release `apk-latest` no Wi-Fi; o Android sempre pede um toque para instalar.
+- **Palavra de ativação:** CONFIG > Voz. Padrão: "ei exe", "open exe", "ok notia". Reconhecimento de voz do Android em ciclos curtos (gasta bateria).
+- **Segundo plano:** serviço em primeiro plano com notificação "OpenEXE ativo".
+- **Alarme real** no relógio do sistema (`alarme 07:30`, `próximo alarme`) e no cabeçalho.
+- **Chaves guardadas criptografadas** (flutter_secure_storage).
+- **Tela de bloqueio do OpenEXE:** camada extra com biometria/PIN; não substitui o bloqueio do Android.
+- **Barra de tarefas da IA** com barra de progresso e botão PARAR (agente de apps, backup, atualização, console).
+- **Coluna direita em sanfona:** Hub de IAs, Dock e Apps; só um aberto por vez, Dock aberto por padrão.

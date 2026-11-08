@@ -9,7 +9,7 @@ flutter create notia --org com.notia.os --platforms android
 cd notia
 
 flutter pub add webview_flutter 'installed_apps:^1.6.0' shared_preferences http \
-  speech_to_text flutter_tts sqflite connectivity_plus 'permission_handler:^11.3.1' math_expressions \
+  speech_to_text flutter_tts sqflite connectivity_plus 'permission_handler:^11.3.1' 'flutter_secure_storage:^9.2.2' math_expressions \
   supabase_flutter audioplayers path_provider 'google_sign_in:^6.2.2' url_launcher \
   'flutter_contacts:^1.1.9' geolocator battery_plus image_picker google_mlkit_text_recognition \
   'local_auth:^2.3.0'

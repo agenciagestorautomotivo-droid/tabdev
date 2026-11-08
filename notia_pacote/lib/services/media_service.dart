@@ -21,6 +21,9 @@ class MediaService {
   final SettingsStore settings;
   final VaultService vault;
 
+  /// Traduz o pedido de música para inglês (o MusicGen entende melhor). Ligado pelo shell.
+  Future<String> Function(String text)? translator;
+
   Future<Directory> _dir(String sub) async {
     String base;
     if (await vault.ensure()) {
@@ -56,6 +59,14 @@ class MediaService {
     if (settings.hfToken.isEmpty) {
       throw Exception('falta o token do Hugging Face em CONFIG (grátis)');
     }
+    var text = prompt;
+    try {
+      final t = translator;
+      if (t != null) text = (await t(prompt)).trim();
+      if (text.isEmpty) text = prompt;
+    } catch (_) {
+      text = prompt;
+    }
     final res = await http
         .post(
           Uri.parse('https://api-inference.huggingface.co/models/facebook/musicgen-small'),
@@ -64,7 +75,7 @@ class MediaService {
             'Content-Type': 'application/json',
             'x-wait-for-model': 'true',
           },
-          body: jsonEncode({'inputs': prompt}),
+          body: jsonEncode({'inputs': text}),
         )
         .timeout(const Duration(seconds: 150));
     final ct = res.headers['content-type'] ?? '';

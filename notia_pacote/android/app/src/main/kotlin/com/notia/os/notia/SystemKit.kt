@@ -308,4 +308,41 @@ object SystemKit {
             false
         }
     }
+
+    // ---------- Despertador real (relógio do sistema) ----------
+    /** Cria o alarme no app de Relógio do Android; ele toca mesmo com o OpenEXE fechado. */
+    fun setAlarm(ctx: Context, hour: Int, minute: Int, label: String): Boolean = try {
+        ctx.startActivity(
+            Intent(AlarmClock.ACTION_SET_ALARM)
+                .putExtra(AlarmClock.EXTRA_HOUR, hour)
+                .putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                .putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    /** Horário (ms) do próximo alarme do sistema, ou -1. */
+    fun nextAlarm(ctx: Context): Long = try {
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        am.nextAlarmClock?.triggerTime ?: -1L
+    } catch (_: Exception) {
+        -1L
+    }
+
+    // ---------- Serviço em primeiro plano ----------
+    fun keepAlive(ctx: Context, on: Boolean): Boolean = try {
+        val i = Intent(ctx, KeepAliveService::class.java)
+        if (on) {
+            if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+        } else {
+            ctx.stopService(i)
+        }
+        true
+    } catch (_: Exception) {
+        false
+    }
 }

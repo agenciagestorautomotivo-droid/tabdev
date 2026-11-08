@@ -5,9 +5,10 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart' hide Intent;
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 
+import '../services/ai_task_service.dart';
 import '../services/keyboard_mode.dart';
+import '../services/voice_service.dart';
 import '../services/ai_router.dart';
 import '../services/device_commands.dart';
 import '../services/device_kit.dart';
@@ -53,6 +54,8 @@ class ConsolePanel extends StatefulWidget {
     required this.drive,
     required this.media,
     required this.kit,
+    required this.voice,
+    this.tasks,
     this.keyboard,
   });
   final NotiaBrain brain;
@@ -72,6 +75,10 @@ class ConsolePanel extends StatefulWidget {
 
   /// Modo do teclado (físico/virtual). Em modo físico o campo não abre o teclado da tela.
   final KeyboardMode? keyboard;
+  final VoiceService voice;
+
+  /// Barra de tarefas da IA (opcional).
+  final AiTaskService? tasks;
 
   @override
   State<ConsolePanel> createState() => ConsolePanelState();
@@ -88,12 +95,21 @@ class ConsolePanelState extends State<ConsolePanel> {
         'Digite "ajuda" para ver o que o Notia faz com o aparelho (agente de apps, notificações, câmera...).',
         color: N.dim),
   ];
-  final _stt = SpeechToText();
   final _tts = FlutterTts();
   final _player = AudioPlayer();
-  bool _sttReady = false;
   bool _listening = false;
   bool _busy = false;
+
+  void _setBusy(bool v, [String title = 'IA pensando…']) {
+    if (mounted) setState(() => _busy = v);
+    final t = widget.tasks;
+    if (t == null) return;
+    if (v) {
+      t.upsert('console', title);
+    } else {
+      t.finish('console');
+    }
+  }
   Timer? _clipTimer;
   String _lastClip = '';
   String? _clipUrl;
@@ -131,7 +147,7 @@ class ConsolePanelState extends State<ConsolePanel> {
   @override
   void dispose() {
     _clipTimer?.cancel();
-    _stt.stop();
+    widget.voice.stop();
     _tts.stop();
     _player.dispose();
     _ctrl.dispose();
@@ -320,11 +336,11 @@ class ConsolePanelState extends State<ConsolePanel> {
     if (lowCmd.startsWith('drive:')) return _handleDrive(text.substring(6).trim());
 
     // Recursos do aparelho: agente de apps, notificações, contatos, câmera, rotinas...
-    setState(() => _busy = true);
+    _setBusy(true, 'Executando comando');
     try {
       if (await _dev.handle(text)) return;
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _setBusy(false);
     }
 
     // Abrir ou instalar apps (Play Store): regras locais, 0 tokens
@@ -371,7 +387,7 @@ class ConsolePanelState extends State<ConsolePanel> {
     final force = prompt.startsWith('/esp ');
     if (force) prompt = prompt.substring(5);
 
-    setState(() => _busy = true);
+    _setBusy(true, 'IA pensando…');
     try {
       final r = (providerId == null && !force && widget.calc.needsAi(prompt))
           ? await widget.calc.solveWithAi(prompt)
@@ -381,7 +397,7 @@ class ConsolePanelState extends State<ConsolePanel> {
     } catch (e) {
       _add(_Msg('Falha: ${_clean(e)}', color: N.red));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _setBusy(false);
     }
   }
 
@@ -402,7 +418,7 @@ class ConsolePanelState extends State<ConsolePanel> {
       return;
     }
     final music = it.kind == IntentKind.music;
-    setState(() => _busy = true);
+    _setBusy(true, music ? 'Compondo música' : 'Gerando imagem');
     _add(_Msg(music ? 'Compondo… pode levar até 1 minuto.' : 'Gerando a imagem…', color: N.dim));
     try {
       final r = music ? await widget.media.music(it.prompt) : await widget.media.image(it.prompt);
@@ -422,7 +438,7 @@ class ConsolePanelState extends State<ConsolePanel> {
             color: N.amber));
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _setBusy(false);
     }
   }
 
@@ -559,42 +575,31 @@ class ConsolePanelState extends State<ConsolePanel> {
       await _stopListening();
       return;
     }
-    if (!_sttReady) {
-      _sttReady = await _stt.initialize(
-        onStatus: (s) {
-          if (s == 'done' || s == 'notListening') {
-            if (mounted) setState(() => _listening = false);
-            widget.voiceStatus.value = 'PRONTA';
-          }
-        },
-        onError: (e) {
-          if (mounted) setState(() => _listening = false);
-          widget.voiceStatus.value = 'ERRO';
-        },
-      );
-    }
-    if (!_sttReady) {
-      _add(_Msg('Microfone indisponível. Confira a permissão de áudio.', color: N.red));
-      widget.voiceStatus.value = 'INDISPONÍVEL';
-      return;
-    }
     setState(() => _listening = true);
     widget.voiceStatus.value = 'OUVINDO';
-    await _stt.listen(
-      localeId: 'pt_BR',
-      onResult: (r) {
-        _ctrl.text = r.recognizedWords;
-        if (r.finalResult) {
-          final t = r.recognizedWords;
+    final ok = await widget.voice.listen(
+      owner: 'console',
+      onResult: (t, fin) {
+        _ctrl.text = t;
+        if (fin) {
           _stopListening();
           _submit(t);
         }
       },
+      onEnd: () {
+        if (mounted) setState(() => _listening = false);
+        widget.voiceStatus.value = 'PRONTA';
+      },
     );
+    if (!ok) {
+      if (mounted) setState(() => _listening = false);
+      _add(_Msg('Microfone indisponível. Confira a permissão de áudio.', color: N.red));
+      widget.voiceStatus.value = 'INDISPONÍVEL';
+    }
   }
 
   Future<void> _stopListening() async {
-    await _stt.stop();
+    await widget.voice.stop();
     if (mounted) setState(() => _listening = false);
     widget.voiceStatus.value = 'PRONTA';
   }

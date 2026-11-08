@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
@@ -103,14 +104,47 @@ class NativeBridge {
       _call<void>('a11y.overlay', {'text': text, 'show': show});
 
   /// Pergunta SIM/NÃO por cima do app em uso e espera a resposta (60 s; sem resposta = não).
+  /// Ligado pelo shell: ouve "sim"/"não" pelo microfone (null = não entendeu).
+  static Future<bool?> Function()? voiceConfirm;
+  static Future<void> Function()? voiceStop;
+
   static Future<bool> confirmOverlay(String msg) async {
     final f = events
         .firstWhere((e) => e['type'] == 'agent_confirm')
         .timeout(const Duration(seconds: 60), onTimeout: () => <String, dynamic>{'ok': false});
     await _call<void>('a11y.confirm', {'text': msg});
-    final e = await f;
-    return e['ok'] == true;
+    final vc = voiceConfirm;
+    if (vc == null) return (await f)['ok'] == true;
+    // Toque no SIM/NÃO ou resposta falada: vale o que vier primeiro.
+    final c = Completer<bool>();
+    var byVoice = false;
+    f.then((e) {
+      if (!c.isCompleted) c.complete(e['ok'] == true);
+    });
+    vc().then((v) {
+      if (v != null && !c.isCompleted) {
+        byVoice = true;
+        c.complete(v);
+      }
+    });
+    final r = await c.future;
+    await voiceStop?.call();
+    if (byVoice) await _call<void>('a11y.hideConfirm');
+    return r;
   }
+
+  // ----- Despertador, segundo plano -----
+  static Future<bool> setAlarm(int hour, int minute, String label) async =>
+      (await _call<bool>('alarm.set', {'hour': hour, 'minute': minute, 'label': label})) ?? false;
+
+  /// Próximo alarme do relógio do sistema, ou null.
+  static Future<DateTime?> nextAlarm() async {
+    final ms = await _call<int>('alarm.next');
+    return ms == null || ms <= 0 ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  static Future<bool> keepAlive(bool on) async =>
+      (await _call<bool>('keepalive', {'on': on})) ?? false;
 
   // ----- Notificações -----
   static Future<bool> notifEnabled() async => (await _call<bool>('notif.enabled')) ?? false;
