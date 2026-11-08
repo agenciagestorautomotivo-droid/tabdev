@@ -34,6 +34,28 @@ done
 # Sem R8: o ML Kit referencia classes de idiomas que não estão no app e o R8 falharia.
 f=android/app/build.gradle.kts
 [ -f "$f" ] && sed -i 's/signingConfig = signingConfigs.getByName("debug")/signingConfig = signingConfigs.getByName("debug")\n            isMinifyEnabled = false\n            isShrinkResources = false/' "$f" || true
+# Assinatura fixa: sem isso o Gradle gera uma chave nova a cada build e o Android recusa a atualização.
+if [ -f "$HERE/../release.keystore" ]; then
+  cp "$HERE/../release.keystore" android/app/openexe.keystore
+  python3 - <<'PY'
+import re
+p = "android/app/build.gradle.kts"
+s = open(p).read()
+blk = """    signingConfigs {
+        create("exe") {
+            storeFile = file("openexe.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+"""
+if 'create("exe")' not in s:
+    s = s.replace("    buildTypes {", blk + "    buildTypes {", 1)
+s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("exe")')
+open(p, "w").write(s)
+PY
+fi
 
 # local_auth (biometria) exige um tema AppCompat.
 for f in "$MAIN/res/values/styles.xml" "$MAIN/res/values-night/styles.xml"; do
