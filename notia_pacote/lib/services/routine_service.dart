@@ -4,19 +4,51 @@ import 'dart:convert';
 import 'settings_store.dart';
 import 'text_utils.dart';
 
+class RItem {
+  RItem(this.text, {this.done = false});
+  String text;
+  bool done;
+  Map<String, dynamic> toJson() => {'t': text, 'd': done};
+  static RItem fromJson(Map<String, dynamic> j) => RItem('${j['t']}', done: j['d'] == true);
+}
+
 class Routine {
-  Routine(this.trigger, this.command, {this.active = true, this.lastRunMs = 0});
+  Routine(this.trigger, this.command,
+      {this.active = true, this.lastRunMs = 0, List<RItem>? checklist, List<RItem>? steps})
+      : checklist = checklist ?? [],
+        steps = steps ?? [];
   final String trigger; // hora:07:00 | carregador | bateria<20 | local:casa | notif:whatsapp
   final String command; // qualquer comando do console
   bool active;
   int lastRunMs;
 
-  Map<String, dynamic> toJson() =>
-      {'t': trigger, 'c': command, 'a': active, 'l': lastRunMs};
-  static Routine fromJson(Map<String, dynamic> j) => Routine(
-      '${j['t']}', '${j['c']}', active: j['a'] != false, lastRunMs: (j['l'] as num?)?.toInt() ?? 0);
+  /// Checklist (itens independentes) e linha do tempo (etapas em ordem; a primeira
+  /// não concluída é a etapa atual).
+  final List<RItem> checklist;
+  final List<RItem> steps;
+
+  bool get manual => trigger == 'manual';
+  int get checksDone => checklist.where((e) => e.done).length;
+
+  /// Índice da etapa atual, ou -1 se todas concluídas / sem etapas.
+  int get currentStep => steps.indexWhere((e) => !e.done);
+
+  Map<String, dynamic> toJson() => {
+        't': trigger,
+        'c': command,
+        'a': active,
+        'l': lastRunMs,
+        'cl': [for (final e in checklist) e.toJson()],
+        'st': [for (final e in steps) e.toJson()],
+      };
+  static Routine fromJson(Map<String, dynamic> j) => Routine('${j['t']}', '${j['c']}',
+      active: j['a'] != false,
+      lastRunMs: (j['l'] as num?)?.toInt() ?? 0,
+      checklist: [for (final e in (j['cl'] as List? ?? [])) RItem.fromJson(Map<String, dynamic>.from(e as Map))],
+      steps: [for (final e in (j['st'] as List? ?? [])) RItem.fromJson(Map<String, dynamic>.from(e as Map))]);
 
   String get label {
+    if (manual) return 'tarefa manual';
     if (trigger.startsWith('hora:')) return 'às ${trigger.substring(5)}';
     if (trigger == 'carregador') return 'ao ligar o carregador';
     if (trigger.startsWith('bateria<')) return 'bateria abaixo de ${trigger.substring(8)}%';
@@ -102,6 +134,51 @@ class RoutineService {
   Future<void> toggle(int i) async {
     if (i < 0 || i >= _list.length) return;
     _list[i].active = !_list[i].active;
+    await _save();
+  }
+
+  bool _ok(int i) => i >= 0 && i < _list.length;
+
+  Future<void> addCheck(int i, String t) async {
+    if (!_ok(i) || t.trim().isEmpty) return;
+    _list[i].checklist.add(RItem(t.trim()));
+    await _save();
+  }
+
+  Future<void> toggleCheck(int i, int j) async {
+    if (!_ok(i) || j >= _list[i].checklist.length) return;
+    _list[i].checklist[j].done = !_list[i].checklist[j].done;
+    await _save();
+  }
+
+  Future<void> removeCheck(int i, int j) async {
+    if (!_ok(i) || j >= _list[i].checklist.length) return;
+    _list[i].checklist.removeAt(j);
+    await _save();
+  }
+
+  Future<void> addStep(int i, String t) async {
+    if (!_ok(i) || t.trim().isEmpty) return;
+    _list[i].steps.add(RItem(t.trim()));
+    await _save();
+  }
+
+  /// Conclui (ou reabre) uma etapa da linha do tempo.
+  Future<void> toggleStep(int i, int j) async {
+    if (!_ok(i) || j >= _list[i].steps.length) return;
+    _list[i].steps[j].done = !_list[i].steps[j].done;
+    await _save();
+  }
+
+  Future<void> removeStep(int i, int j) async {
+    if (!_ok(i) || j >= _list[i].steps.length) return;
+    _list[i].steps.removeAt(j);
+    await _save();
+  }
+
+  Future<void> clearSteps(int i) async {
+    if (!_ok(i)) return;
+    _list[i].steps.clear();
     await _save();
   }
 

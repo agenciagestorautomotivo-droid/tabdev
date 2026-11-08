@@ -735,23 +735,151 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   Future<void> _showRoutines() async {
     final c = TextEditingController();
+    final fields = <String, TextEditingController>{};
+    TextEditingController f(String k) => fields.putIfAbsent(k, () => TextEditingController());
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
         final l = _routines.all;
+        void refresh() {
+          setD(() {});
+          if (mounted) setState(() {});
+        }
+
+        Widget head(String t, {String? right}) => Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 6),
+              child: Row(children: [
+                Expanded(child: Text(t, style: N.t(c: N.cyan, s: 11, w: FontWeight.w700, ls: 1))),
+                if (right != null) Text(right, style: N.t(c: N.dim, s: 11)),
+              ]),
+            );
+
+        Widget addRow(String key, String hint, Future<void> Function(String) onAdd) => Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: f(key),
+                  style: N.t(s: 12),
+                  decoration: InputDecoration(
+                      isDense: true, hintText: hint, hintStyle: N.t(c: N.dim, s: 11)),
+                  onSubmitted: (v) async {
+                    await onAdd(v);
+                    f(key).clear();
+                    refresh();
+                  },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add, color: N.cyan, size: 20),
+                onPressed: () async {
+                  await onAdd(f(key).text);
+                  f(key).clear();
+                  refresh();
+                },
+              ),
+            ]);
+
+        Widget detail(int i) {
+          final r = l[i];
+          final cur = r.currentStep;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              head('CHECKLIST', right: '${r.checksDone} de ${r.checklist.length} concluído(s)'),
+              for (var j = 0; j < r.checklist.length; j++)
+                Row(children: [
+                  Checkbox(
+                    value: r.checklist[j].done,
+                    activeColor: N.cyan,
+                    visualDensity: VisualDensity.compact,
+                    onChanged: (_) async {
+                      await _routines.toggleCheck(i, j);
+                      refresh();
+                    },
+                  ),
+                  Expanded(
+                    child: Text(r.checklist[j].text,
+                        style: N.t(
+                            c: r.checklist[j].done ? N.dim : N.text,
+                            s: 12)
+                            .copyWith(
+                                decoration: r.checklist[j].done ? TextDecoration.lineThrough : null)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: N.red, size: 16),
+                    onPressed: () async {
+                      await _routines.removeCheck(i, j);
+                      refresh();
+                    },
+                  ),
+                ]),
+              addRow('c$i', 'Adicionar item…', (v) => _routines.addCheck(i, v)),
+              head('LINHA DO TEMPO'),
+              for (var j = 0; j < r.steps.length; j++)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: j == cur ? N.cyan.withOpacity(0.10) : N.line2.withOpacity(0.35),
+                    border: Border(
+                        left: BorderSide(color: j == cur ? N.cyan : Colors.transparent, width: 3)),
+                  ),
+                  child: Row(children: [
+                    Icon(
+                        r.steps[j].done
+                            ? Icons.check_circle
+                            : (j == cur ? Icons.play_arrow : Icons.hourglass_bottom),
+                        size: 16,
+                        color: r.steps[j].done ? N.green : (j == cur ? N.cyan : N.amber)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(r.steps[j].text.toUpperCase(),
+                          style: N.t(c: r.steps[j].done ? N.dim : N.text, s: 12, w: FontWeight.w700)),
+                    ),
+                    if (j == cur)
+                      NBtn('Concluir', accent: true, onTap: () async {
+                        await _routines.toggleStep(i, j);
+                        refresh();
+                      })
+                    else if (r.steps[j].done)
+                      NBtn('Reabrir', onTap: () async {
+                        await _routines.toggleStep(i, j);
+                        refresh();
+                      }),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: N.red, size: 16),
+                      onPressed: () async {
+                        await _routines.removeStep(i, j);
+                        refresh();
+                      },
+                    ),
+                  ]),
+                ),
+              addRow('s$i', 'Nova etapa…', (v) => _routines.addStep(i, v)),
+              if (r.steps.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: NBtn('Remover linha do tempo desta tarefa', onTap: () async {
+                    await _routines.clearSteps(i);
+                    refresh();
+                  }),
+                ),
+            ]),
+          );
+        }
+
         return Dialog(
           backgroundColor: N.bg,
           shape: RoundedRectangleBorder(
               side: const BorderSide(color: N.border), borderRadius: BorderRadius.circular(8)),
           child: SizedBox(
-            width: 560,
-            height: 480,
+            width: 640,
+            height: 560,
             child: Column(children: [
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(children: [
                   Expanded(
-                      child: Text('Rotinas (${l.length})',
+                      child: Text('Rotinas e tarefas (${l.length})',
                           style: N.t(c: N.cyan, w: FontWeight.w700, s: 15))),
                   TextButton(
                       onPressed: () => Navigator.pop(ctx),
@@ -761,30 +889,37 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
               Expanded(
                 child: l.isEmpty
                     ? Center(
-                        child: Text('Nenhuma rotina ainda.', style: N.t(c: N.dim)))
+                        child: Text('Nada ainda. Crie uma tarefa abaixo.', style: N.t(c: N.dim)))
                     : ListView(children: [
                         for (var i = 0; i < l.length; i++)
-                          ListTile(
-                            dense: true,
-                            leading: Switch(
-                              value: l[i].active,
-                              activeColor: N.cyan,
-                              onChanged: (_) async {
-                                await _routines.toggle(i);
-                                setD(() {});
-                                if (mounted) setState(() {});
-                              },
-                            ),
-                            title: Text('${l[i].label}: ${l[i].command}',
+                          ExpansionTile(
+                            key: ValueKey('${identityHashCode(l[i])}'),
+                            tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                            leading: l[i].manual
+                                ? const Icon(Icons.checklist, color: N.cyan, size: 22)
+                                : Switch(
+                                    value: l[i].active,
+                                    activeColor: N.cyan,
+                                    onChanged: (_) async {
+                                      await _routines.toggle(i);
+                                      refresh();
+                                    },
+                                  ),
+                            title: Text(
+                                l[i].manual ? l[i].command : '${l[i].label}: ${l[i].command}',
                                 style: N.t(s: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                                'checklist ${l[i].checksDone}/${l[i].checklist.length} · '
+                                'etapas ${l[i].steps.where((e) => e.done).length}/${l[i].steps.length}',
+                                style: N.t(c: N.dim, s: 11)),
                             trailing: IconButton(
                               icon: const Icon(Icons.close, color: N.red, size: 18),
                               onPressed: () async {
                                 await _routines.removeAt(i);
-                                setD(() {});
-                                if (mounted) setState(() {});
+                                refresh();
                               },
                             ),
+                            children: [detail(i)],
                           ),
                       ]),
               ),
@@ -797,10 +932,19 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                       style: N.t(s: 12),
                       decoration: InputDecoration(
                           isDense: true,
-                          hintText: 'Nova: 07:00 resumir minha agenda · carregador => drive: backup',
+                          hintText: 'Tarefa: nome · Rotina: 07:00 resumir agenda · carregador => drive: backup',
                           hintStyle: N.t(c: N.dim, s: 11)),
                     ),
                   ),
+                  TextButton(
+                      onPressed: () async {
+                        final t = c.text.trim();
+                        if (t.isEmpty) return;
+                        await _routines.add(Routine('manual', t));
+                        c.clear();
+                        refresh();
+                      },
+                      child: Text('NOVA TAREFA', style: N.t(c: N.cyan, s: 12, w: FontWeight.w700))),
                   TextButton(
                       onPressed: () {
                         final t = c.text.trim();
@@ -808,7 +952,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                         Navigator.pop(ctx);
                         _console?.ask('rotina: $t');
                       },
-                      child: Text('ADICIONAR', style: N.t(c: N.cyan, s: 12, w: FontWeight.w700))),
+                      child: Text('ROTINA', style: N.t(c: N.cyan, s: 12, w: FontWeight.w700))),
                 ]),
               ),
             ]),
