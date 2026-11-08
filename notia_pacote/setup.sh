@@ -31,6 +31,10 @@ cp -r "$HERE/$MAIN/res/"* "$MAIN/res/"
 for f in android/app/build.gradle.kts android/app/build.gradle; do
   [ -f "$f" ] && sed -i -E 's/minSdk(Version)?( =|) +flutter\.minSdkVersion/minSdk = 26/' "$f" || true
 done
+# Sem R8: o ML Kit referencia classes de idiomas que não estão no app e o R8 falharia.
+f=android/app/build.gradle.kts
+[ -f "$f" ] && sed -i 's/signingConfig = signingConfigs.getByName("debug")/signingConfig = signingConfigs.getByName("debug")\n            isMinifyEnabled = false\n            isShrinkResources = false/' "$f" || true
+
 # local_auth (biometria) exige um tema AppCompat.
 for f in "$MAIN/res/values/styles.xml" "$MAIN/res/values-night/styles.xml"; do
   [ -f "$f" ] && sed -i -E 's#parent="@android:style/Theme\.(Light|Black)\.NoTitleBar"#parent="Theme.AppCompat.NoActionBar"#' "$f" || true
