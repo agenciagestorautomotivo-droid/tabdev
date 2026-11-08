@@ -6,6 +6,7 @@ import 'device_kit.dart';
 import 'native_bridge.dart';
 import 'notia_brain.dart';
 import 'settings_store.dart';
+import 'termux_service.dart';
 import 'text_utils.dart';
 
 /// Comandos de voz/texto que usam os recursos do aparelho. Tudo que dá para resolver
@@ -20,6 +21,7 @@ class DeviceCommands {
     required this.speak,
     required this.launch,
     required this.openImage,
+    required this.openUrl,
   });
   final DeviceKit kit;
   final AiRouter router;
@@ -29,6 +31,7 @@ class DeviceCommands {
   final void Function(String text) speak;
   final Future<String?> Function(String name) launch;
   final void Function(String path) openImage;
+  final void Function(String url) openUrl;
 
   static const help = '''Recursos do aparelho:
 • no <app>, <tarefa>  ou  agente: <tarefa>  → o Notia opera o app (PARAR na faixa do topo)
@@ -39,6 +42,7 @@ class DeviceCommands {
 • rotina: 07:00 resumir minha agenda · rotinas · rotina remover N
 • lugar salvar casa · lugares · rotina: local casa => ...
 • alarme 07:30 [nome] · próximo alarme (usa o Relógio do Android; toca com o app fechado)
+• dev <pedido> (a IA cria e testa no Termux) · dev parar · dev status · termux <comando> · servir <pasta> [porta]
 • scripts · script <nome> · prompts · prompt <nome> (biblioteca do PAINEL)
 • conectores · conector <nome>: texto (webhooks do PAINEL)
 • aparelho (status das permissões)''';
@@ -251,6 +255,50 @@ class DeviceCommands {
           ? 'Nenhum alarme ativo. Crie com: alarme 07:30'
           : 'Próximo alarme: ${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')} (${n.day}/${n.month}).',
           color: N.cyan);
+      return true;
+    }
+
+    // ----- TAB DEV-IA (Termux) -----
+    final dv = RegExp(r'^dev(?:\s*:|\s)\s*(.+)$', caseSensitive: false).firstMatch(text.trim());
+    if (dv != null) {
+      final arg = dv.group(1)!.trim();
+      final la = arg.toLowerCase();
+      if (la == 'parar' || la == 'pare') {
+        kit.dev.stop();
+        say('Parando o agente de desenvolvimento…', color: N.amber);
+        return true;
+      }
+      if (la == 'status') {
+        final st = await TermuxService.state();
+        say('Termux: ${st.installed ? 'instalado' : 'não instalado'} · permissão: ${st.perm ? 'ok' : 'falta'}'
+            '${kit.dev.running ? ' · agente rodando' : ''}', color: N.text);
+        return true;
+      }
+      await kit.dev.run(arg, say);
+      return true;
+    }
+    final tx = RegExp(r'^termux\s+(.+)$', caseSensitive: false, dotAll: true).firstMatch(text.trim());
+    if (tx != null) {
+      final r = await kit.termux.run(tx.group(1)!, dir: settings.devDir);
+      final o = r.tail(1800);
+      say(r.error != null ? 'Erro: ${r.error}${o.isEmpty ? '' : '\n$o'}' : (o.isEmpty ? '(sem saída, código ${r.exit})' : o),
+          color: r.ok ? N.text : N.amber);
+      return true;
+    }
+    final sv = RegExp(r'^servir\s+(\S+)(?:\s+(\d{2,5}))?$', caseSensitive: false).firstMatch(text.trim());
+    if (sv != null) {
+      final port = sv.group(2) ?? '8080';
+      final dir = sv.group(1)!.replaceAll(RegExp(r'[^A-Za-z0-9._/-]'), '');
+      say('Subindo $dir na porta $port…', color: N.dim);
+      final r = await kit.termux.run(
+          'cd "$dir" && (pkill -f "http.server $port" 2>/dev/null; nohup python -m http.server $port >/dev/null 2>&1 &) ; sleep 1; echo ok',
+          dir: settings.devDir);
+      if (r.ok) {
+        openUrl('http://localhost:$port');
+        say('Aberto no Dock (http://localhost:$port).', color: N.green);
+      } else {
+        say('Não consegui subir: ${r.error ?? r.tail(300)}', color: N.red);
+      }
       return true;
     }
 

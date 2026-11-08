@@ -125,6 +125,7 @@ class ConsolePanelState extends State<ConsolePanel> {
     speak: speak,
     launch: widget.onLaunchApp,
     openImage: showImage,
+    openUrl: widget.onOpenUrl,
   );
 
   @override

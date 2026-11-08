@@ -104,6 +104,13 @@ class SettingsStore {
   String get connectorsJson => _s('connectors_v1').isEmpty ? '[]' : _s('connectors_v1');
   Future<void> setConnectorsJson(String v) => _write('connectors_v1', v);
 
+  /// Agente de desenvolvimento: executa sem perguntar (exceto comandos arriscados).
+  bool get devAuto => _p.getBool('dev_auto') ?? false;
+  Future<void> setDevAuto(bool v) => _p.setBool('dev_auto', v);
+  String get devDir => _p.getString('dev_dir') ?? 'projetos';
+  Future<void> setDevDir(String v) =>
+      _p.setString('dev_dir', v.trim().isEmpty ? 'projetos' : v.trim().replaceAll(RegExp(r'^[/~]+'), ''));
+
   /// Perfil de energia do OpenEXE: 'eco', 'equilibrado' ou 'desempenho'.
   String get perfMode => _p.getString('perf_mode') ?? 'equilibrado';
   Future<void> setPerfMode(String v) => _p.setString('perf_mode', v);

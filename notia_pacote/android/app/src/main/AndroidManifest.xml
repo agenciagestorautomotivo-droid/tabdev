@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- A foto é feita pelo app de câmera do sistema, então CAMERA não é declarada. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -69,6 +70,10 @@
         </activity>
 
         <!-- Agente de apps: ver e operar a tela de outros apps -->
+        <receiver
+            android:name=".TermuxResultReceiver"
+            android:exported="false" />
+
         <service
             android:name=".KeepAliveService"
             android:exported="false"
@@ -127,6 +132,7 @@
     </application>
 
     <queries>
+        <package android:name="com.termux" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />

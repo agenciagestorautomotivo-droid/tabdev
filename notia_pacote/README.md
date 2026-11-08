@@ -200,3 +200,10 @@ Este código foi escrito sem acesso ao Flutter SDK, então a primeira compilaç�
 - **Scripts e prompts:** biblioteca (`script nome`, `prompt nome`, `scripts`, `prompts`).
 - **Segurança:** nota 0–100 (bloqueio de tela, criptografia, patch, USB debugging, root), acessos concedidos, bloquear agora, limpar rastros, apagar chaves.
 - **Otimização:** RAM/armazenamento/CPU/temperatura, perfis de energia, limpeza de cache/IA/histórico/banco, bateria e atalhos do Android.
+
+## TAB DEV-IA: desenvolvimento com IA no tablet (Termux)
+
+- **PAINEL > Dev · Termux:** passo a passo (instalar Termux do F-Droid, permissão, preparo, teste), terminal rápido e lista de projetos.
+- **Console:** `dev <pedido>` (a IA planeja, roda no Termux, lê os erros e corrige em até 8 passos), `dev parar`, `dev status`, `termux <comando>`, `servir <pasta> [porta]` (abre no Dock).
+- Pede confirmação antes de executar; comandos perigosos (apagar a home, mkfs, dd) são bloqueados sempre.
+- Progresso na faixa TAREFA IA, com botão PARAR.

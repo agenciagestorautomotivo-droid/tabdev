@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'services/ai_router.dart';
 import 'services/clipboard_history_service.dart';
@@ -13,6 +14,7 @@ import 'services/repo_store.dart';
 import 'services/settings_store.dart';
 import 'services/supabase_sync_service.dart';
 import 'services/system_monitor_service.dart';
+import 'services/termux_service.dart';
 import 'theme.dart';
 
 /// Painel de controle do OpenEXE: IAs, repositórios, conectores, plugins, mods e biblioteca
@@ -34,6 +36,7 @@ class ControlPanel extends StatefulWidget {
     required this.clip,
     required this.monitor,
     required this.lockNow,
+    required this.termuxService,
   });
   final SettingsStore settings;
   final AiRouter router;
@@ -49,6 +52,7 @@ class ControlPanel extends StatefulWidget {
   final ClipboardHistoryService clip;
   final SystemMonitorService monitor;
   final VoidCallback lockNow;
+  final TermuxService termuxService;
 
   @override
   State<ControlPanel> createState() => _ControlPanelState();
@@ -75,6 +79,7 @@ class _ControlPanelState extends State<ControlPanel> {
     ['Scripts e prompts', Icons.terminal_outlined],
     ['Segurança', Icons.shield_outlined],
     ['Otimização', Icons.speed_outlined],
+    ['Dev · Termux', Icons.code],
   ];
 
   @override
@@ -88,6 +93,9 @@ class _ControlPanelState extends State<ControlPanel> {
   Map<String, dynamic> _opt = {};
   Map<String, PermissionStatus> _perms = {};
   int _aiCache = 0, _history = 0;
+  TermuxState? _tx;
+  String _termOut = '';
+  List<String> _projects = [];
 
   Future<void> _loadSecOpt() async {
     final sec = await NativeBridge.secInfo();
@@ -101,6 +109,7 @@ class _ControlPanelState extends State<ControlPanel> {
     };
     final ac = await widget.brain.countCache();
     final hi = await widget.brain.countHistory();
+    final tx = await TermuxService.state();
     if (mounted) {
       setState(() {
         _sec = sec;
@@ -108,6 +117,7 @@ class _ControlPanelState extends State<ControlPanel> {
         _perms = perms;
         _aiCache = ac;
         _history = hi;
+        _tx = tx;
       });
     }
   }
@@ -1158,6 +1168,141 @@ class _ControlPanelState extends State<ControlPanel> {
         ]),
       );
 
+
+  // ---------- Dev · Termux (TAB DEV-IA) ----------
+  Widget _step(int n, String title, String sub, bool done, List<Widget> actions) => _card(
+        edge: done ? N.green.withOpacity(0.5) : null,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(done ? Icons.check_circle : Icons.looks_one_outlined, size: 18, color: done ? N.green : N.dim),
+            const SizedBox(width: 8),
+            Expanded(child: Text('$n. $title', style: N.t(w: FontWeight.w700, s: 13))),
+          ]),
+          const SizedBox(height: 4),
+          Text(sub, style: N.t(c: N.dim, s: 11)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 6, children: actions),
+        ]),
+      );
+
+  Future<void> _termRun(String cmd) async {
+    setState(() {
+      _busy.add('term');
+      _termOut = '\$ $cmd\n…';
+    });
+    final r = await widget.termuxService.run(cmd, dir: s.devDir);
+    if (!mounted) return;
+    setState(() {
+      _busy.remove('term');
+      final o = r.tail(3000);
+      _termOut = '\$ $cmd\n${r.error != null ? '[erro] ${r.error}\n' : ''}$o${r.error == null ? '\n[código ${r.exit}]' : ''}';
+    });
+  }
+
+  Future<void> _loadProjects() async {
+    final r = await widget.termuxService.run('ls -1', dir: s.devDir);
+    if (!mounted) return;
+    setState(() => _projects = r.ok ? r.stdout.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() : []);
+    if (!r.ok) _snack(r.error ?? 'Não consegui listar.');
+  }
+
+  Widget _devTab() {
+    final tx = _tx;
+    final inst = tx?.installed == true, perm = tx?.perm == true;
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      _h('Dev · Termux', sub: 'O terminal Linux do tablet. A IA cria, roda e corrige projetos aqui dentro. Preparo feito uma vez.'),
+      _step(1, 'Instalar o Termux', 'Use a versão do F-Droid ou do GitHub. A da Play Store é antiga e não funciona com o OpenEXE.', inst, [
+        NBtn('Abrir página (F-Droid)', accent: !inst, onTap: () => launchUrl(Uri.parse('https://f-droid.org/packages/com.termux/'), mode: LaunchMode.externalApplication)),
+        NBtn('Verificar', onTap: _loadSecOpt),
+      ]),
+      _step(2, 'Dar permissão ao OpenEXE', 'O Android pergunta se o OpenEXE pode executar comandos no Termux. Toque em Permitir.', perm, [
+        NBtn('Dar permissão', accent: inst && !perm, onTap: () async {
+          await TermuxService.requestPermission();
+          await Future<void>.delayed(const Duration(seconds: 2));
+          await _loadSecOpt();
+        }),
+        NBtn('Verificar', onTap: _loadSecOpt),
+      ]),
+      _step(3, 'Preparar o ambiente (uma vez)', 'Copie o comando, abra o Termux, cole e dê Enter. Instala git, python, node e libera o OpenEXE. Demora alguns minutos.', false, [
+        NBtn('Copiar comando', accent: true, onTap: () {
+          Clipboard.setData(const ClipboardData(text: TermuxService.bootstrap));
+          _snack('Comando copiado. Cole no Termux.');
+        }),
+        NBtn('Abrir Termux', onTap: () => TermuxService.open()),
+      ]),
+      _step(4, 'Testar a conexão', 'Roda um comando de verdade no Termux e mostra a versão do que está instalado.', false, [
+        NBtn(_busy.contains('term') ? 'Testando…' : 'Testar agora', accent: perm, onTap: _busy.contains('term') ? null : () => _termRun('echo conectado; uname -m; python --version; node --version; git --version')),
+      ]),
+      const SizedBox(height: 6),
+      Text('Agente de desenvolvimento', style: N.t(c: N.cyan, w: FontWeight.w700)),
+      const SizedBox(height: 6),
+      _card(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _switch('Executar sem perguntar', 'Comandos comuns rodam direto. Os arriscados (apagar, sudo, git push…) ainda pedem confirmação.',
+              s.devAuto, s.setDevAuto),
+          Row(children: [
+            Expanded(child: TextField(controller: ctl('devdir', s.devDir), style: N.t(s: 13), decoration: _dec('Pasta dos projetos (dentro da home do Termux)'))),
+            const SizedBox(width: 8),
+            NBtn('Salvar', onTap: () async {
+              await s.setDevDir(ctl('devdir').text);
+              _snack('Pasta salva.');
+              _changed();
+            }),
+          ]),
+        ]),
+      ),
+      Text('Peça pelo console. Exemplos:', style: N.t(c: N.dim, s: 12)),
+      const SizedBox(height: 6),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final e in const [
+          'dev crie um site de uma página para uma loja de carros com WhatsApp',
+          'dev crie uma API em Node com rota /saude e teste',
+          'dev crie um script python que organiza a pasta Downloads por tipo',
+        ])
+          NBtn(e.substring(4, e.length > 48 ? 48 : e.length) + (e.length > 48 ? '…' : ''), onTap: () {
+            Navigator.pop(context);
+            widget.runCommand(e);
+          }),
+      ]),
+      const SizedBox(height: 14),
+      Text('Terminal rápido', style: N.t(c: N.cyan, w: FontWeight.w700)),
+      const SizedBox(height: 6),
+      Row(children: [
+        Expanded(child: TextField(controller: ctl('term'), style: N.t(s: 13), decoration: _dec('Comando (roda dentro da pasta dos projetos)'),
+            onSubmitted: (v) => v.trim().isEmpty ? null : _termRun(v.trim()))),
+        const SizedBox(width: 8),
+        NBtn('Executar', accent: true, onTap: _busy.contains('term') ? null : () => ctl('term').text.trim().isEmpty ? null : _termRun(ctl('term').text.trim())),
+      ]),
+      if (_termOut.isNotEmpty)
+        Container(
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.all(10),
+          width: double.infinity,
+          decoration: BoxDecoration(color: Colors.black, border: Border.all(color: N.border, width: 0.7), borderRadius: BorderRadius.circular(6)),
+          child: SelectableText(_termOut, style: N.t(c: N.text, s: 12)),
+        ),
+      const SizedBox(height: 14),
+      Row(children: [
+        Expanded(child: Text('Projetos', style: N.t(c: N.cyan, w: FontWeight.w700))),
+        NBtn('Atualizar lista', onTap: _loadProjects),
+      ]),
+      const SizedBox(height: 6),
+      if (_projects.isEmpty) Text('Nenhum projeto ainda (ou lista não carregada).', style: N.t(c: N.dim, s: 12)),
+      for (final pj in _projects)
+        _card(
+          child: Row(children: [
+            const Icon(Icons.folder_outlined, size: 18, color: N.cyan),
+            const SizedBox(width: 8),
+            Expanded(child: Text(pj, style: N.t(s: 13))),
+            NBtn('Servir no Dock', onTap: () {
+              Navigator.pop(context);
+              widget.runCommand('servir $pj');
+            }),
+          ]),
+        ),
+    ]);
+  }
+
   // ---------- Estrutura ----------
   @override
   Widget build(BuildContext context) {
@@ -1169,7 +1314,8 @@ class _ControlPanelState extends State<ControlPanel> {
       4 => _modTab(),
       5 => _libTab(),
       6 => _secTab(),
-      _ => _optTab(),
+      7 => _optTab(),
+      _ => _devTab(),
     };
     return Scaffold(
       backgroundColor: N.bg,

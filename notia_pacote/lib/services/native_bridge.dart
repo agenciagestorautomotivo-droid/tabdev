@@ -177,6 +177,17 @@ class NativeBridge {
     return m == null ? null : Map<String, dynamic>.from(m);
   }
 
+  // ----- Termux (TAB DEV-IA) -----
+  static Future<Map<String, dynamic>> termuxState() async {
+    final m = await _call<Map<dynamic, dynamic>>('termux.state');
+    return m == null ? {} : Map<String, dynamic>.from(m);
+  }
+
+  static Future<void> termuxPerm() => _call<bool>('termux.perm');
+  static Future<bool> termuxOpen() async => (await _call<bool>('termux.open')) ?? false;
+  static Future<String> termuxRun(String id, String cmd) async =>
+      (await _call<String>('termux.run', {'id': id, 'cmd': cmd})) ?? 'erro:sem_resposta';
+
   static Future<Map<String, dynamic>> secInfo() async {
     final m = await _call<Map<dynamic, dynamic>>('sec.info');
     return m == null ? {} : Map<String, dynamic>.from(m);

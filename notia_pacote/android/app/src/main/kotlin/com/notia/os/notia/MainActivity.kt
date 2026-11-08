@@ -98,6 +98,22 @@ class MainActivity : FlutterFragmentActivity() {
 
             // ----- Painel do aparelho (OpenEXE) -----
             "sys.stats" -> result.success(SystemKit.stats(this))
+            "termux.state" -> result.success(
+                mapOf("installed" to TermuxKit.installed(this), "perm" to TermuxKit.hasPermission(this))
+            )
+            "termux.perm" -> {
+                TermuxKit.requestPermission(this)
+                result.success(true)
+            }
+            "termux.open" -> result.success(TermuxKit.open(this))
+            "termux.run" -> result.success(
+                TermuxKit.run(
+                    this,
+                    call.argument<String>("id") ?: "",
+                    call.argument<String>("cmd") ?: "",
+                    call.argument<String>("dir")
+                )
+            )
             "sec.info" -> result.success(SystemKit.secInfo(this))
             "opt.info" -> result.success(SystemKit.optInfo(this))
             "opt.clearCache" -> result.success(SystemKit.clearCache(this))

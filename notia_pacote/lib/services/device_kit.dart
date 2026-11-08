@@ -3,6 +3,8 @@ import 'clipboard_history_service.dart';
 import 'gallery_service.dart';
 import 'local_calendar_service.dart';
 import 'connector_store.dart';
+import 'dev_agent_service.dart';
+import 'termux_service.dart';
 import 'library_store.dart';
 import 'lock_service.dart';
 import 'notification_service.dart';
@@ -28,6 +30,8 @@ class DeviceKit {
     required this.lock,
     required this.library,
     required this.connectors,
+    required this.dev,
+    required this.termux,
   });
   final AppAgentService agent;
   final NotificationService notifs;
@@ -42,4 +46,6 @@ class DeviceKit {
   final LockService lock;
   final LibraryStore library;
   final ConnectorStore connectors;
+  final DevAgentService dev;
+  final TermuxService termux;
 }

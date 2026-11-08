@@ -20,6 +20,8 @@ import 'services/ai_task_service.dart';
 import 'services/app_agent_service.dart';
 import 'services/clipboard_history_service.dart';
 import 'services/connector_store.dart';
+import 'services/dev_agent_service.dart';
+import 'services/termux_service.dart';
 import 'services/device_kit.dart';
 import 'services/dock_model.dart';
 import 'services/gallery_service.dart';
@@ -134,6 +136,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     lock: LockService(),
     library: LibraryStore(widget.settings),
     connectors: ConnectorStore(widget.settings),
+    dev: DevAgentService(_termux, _router, widget.settings, _aiTasks),
+    termux: _termux,
   );
 
   // OpenEXE
@@ -154,6 +158,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   Map<String, dynamic>? _nextEvent;
 
   final _voiceStatus = ValueNotifier<String>('PRONTA');
+  final TermuxService _termux = TermuxService();
   final VoiceService _voice = VoiceService();
   final AiTaskService _aiTasks = AiTaskService();
   late final WakeWordService _wake = WakeWordService(
@@ -231,6 +236,41 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   }
 
   void _initAi() {
+    _kit.dev.confirm = (explica, cmds) async {
+      if (!mounted) return false;
+      final ok = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: N.bg,
+          shape: RoundedRectangleBorder(
+              side: const BorderSide(color: N.border), borderRadius: BorderRadius.circular(8)),
+          title: Text('Executar no Termux?', style: N.t(c: N.cyan, w: FontWeight.w700)),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                if (explica.isNotEmpty) Text(explica, style: N.t(s: 13)),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  width: double.infinity,
+                  color: Colors.black,
+                  child: SelectableText(cmds.join('\n\n'), style: N.t(c: N.text, s: 12)),
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('CANCELAR', style: N.t(c: N.dim))),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text('EXECUTAR', style: N.t(c: N.cyan, w: FontWeight.w700))),
+          ],
+        ),
+      );
+      return ok == true;
+    };
     _kit.library.run = (line) async {
       _console?.say('Script: $line', color: N.dim);
       await _console?.ask(line);
@@ -1817,6 +1857,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         monitor: _monitor,
         runCommand: (c) async => await _console?.ask(c),
         openConfig: _openConfig,
+        termuxService: _termux,
         lockNow: () {
           if (mounted) setState(() => _locked = true);
         },
