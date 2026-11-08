@@ -226,8 +226,63 @@ class AiRouter {
           }),
         )
         .timeout(timeout);
-    if (res.statusCode != 200) throw Exception('${p.id} HTTP ${res.statusCode}');
+    if (res.statusCode == 404 && p.id == 'gemini' && !_retried) {
+      // O Google troca/aposenta nomes de modelo: descobre um válido e tenta de novo uma vez.
+      final m = await _discoverGemini(p.key);
+      if (m != null && m != p.model) {
+        await settings.setGeminiModel(m);
+        _retried = true;
+        try {
+          return await _chat(
+              AiProvider(id: p.id, name: p.name, baseUrl: p.baseUrl, model: m, key: p.key, timeout: p.timeout),
+              system, user,
+              timeout: timeout, maxTokens: maxTokens, temperature: temperature);
+        } finally {
+          _retried = false;
+        }
+      }
+    }
+    if (res.statusCode != 200) {
+      var body = utf8.decode(res.bodyBytes).replaceAll(RegExp(r'\s+'), ' ');
+      if (body.length > 140) body = '${body.substring(0, 140)}…';
+      throw Exception('${p.id} HTTP ${res.statusCode} ${p.model} $body');
+    }
     final data = jsonDecode(utf8.decode(res.bodyBytes));
     return (data['choices'][0]['message']['content'] as String).trim();
+  }
+
+  bool _retried = false;
+
+  /// Lista os modelos que a chave enxerga e escolhe o Flash estável mais novo.
+  Future<String?> _discoverGemini(String key) async {
+    try {
+      final r = await http.get(
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200'),
+          headers: {'x-goog-api-key': key}).timeout(const Duration(seconds: 12));
+      if (r.statusCode != 200) return null;
+      final list = (jsonDecode(utf8.decode(r.bodyBytes))['models'] as List? ?? []);
+      final bad = RegExp(r'embed|image|tts|live|audio|thinking|vision|robotics|computer|aqa|imagen|veo|gemma|learnlm');
+      String? best;
+      double bestScore = -1;
+      for (final m in list) {
+        final methods = (m['supportedGenerationMethods'] as List? ?? []).map((e) => '$e').toList();
+        final name = ('${m['name']}').replaceFirst('models/', '');
+        if (!methods.contains('generateContent') || !name.startsWith('gemini') || bad.hasMatch(name)) continue;
+        final v = double.tryParse(RegExp(r'gemini-(\d+(?:\.\d+)?)').firstMatch(name)?.group(1) ?? '') ?? 0;
+        var sc = v * 10;
+        if (name.contains('flash')) sc += 5;
+        if (name.contains('lite')) sc -= 2;
+        if (name.contains('pro')) sc -= 3;
+        if (name.contains('preview') || name.contains('exp')) sc -= 4;
+        if (RegExp(r'-\d{3}$').hasMatch(name)) sc -= 0.5;
+        if (sc > bestScore) {
+          bestScore = sc;
+          best = name;
+        }
+      }
+      return best;
+    } catch (_) {
+      return null;
+    }
   }
 }
