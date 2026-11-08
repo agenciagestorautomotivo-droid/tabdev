@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notia_a11y_description">Permite que o Notia veja a tela e toque, digite e role em outros apps quando você pede a ele para fazer uma tarefa. Ele pede confirmação antes de ações sensíveis, como pagar, enviar ou apagar.</string>
+    <string name="notia_tile_label">Notia</string>
+</resources>
