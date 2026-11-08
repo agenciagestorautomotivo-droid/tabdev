@@ -188,7 +188,7 @@ class ConsolePanelState extends State<ConsolePanel> {
     if (widget.settings.speakReplies) _tts.speak(text);
   }
 
-  void ask(String text) => _submit(text);
+  Future<void> ask(String text) => _submit(text);
 
   // ---------- Compartilhar para o Notia ----------
   Future<void> handleShared(Map<String, dynamic> m) async {

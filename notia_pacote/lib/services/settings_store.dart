@@ -13,7 +13,7 @@ class SettingsStore {
   /// Chaves e senhas ficam no armazenamento seguro do Android (criptografado pelo Keystore).
   static const _secretKeys = {
     'groq_key', 'openrouter_key', 'gemini_key', 'hf_token', 'gh_token', 'sb_anon', 'sb_pass',
-    'custom_providers',
+    'custom_providers', 'connectors_v1',
   };
 
   static Future<SettingsStore> load() async {
@@ -84,6 +84,34 @@ class SettingsStore {
 
   Future<void> setCustomProviders(List<Map<String, String>> v) =>
       _write('custom_providers', jsonEncode(v));
+
+  // --- Painel de controle ---
+  /// IAs desligadas no painel (ids: groq, gemini, openrouter ou nome do provedor próprio).
+  List<String> get aiDisabled => _p.getStringList('ai_off') ?? [];
+  Future<void> setAiDisabled(List<String> v) => _p.setStringList('ai_off', v);
+  String get groqModel => _p.getString('groq_model') ?? 'llama-3.1-8b-instant';
+  Future<void> setGroqModel(String v) => _p.setString('groq_model', v.trim().isEmpty ? 'llama-3.1-8b-instant' : v.trim());
+  String get openrouterModel =>
+      _p.getString('openrouter_model') ?? 'meta-llama/llama-3.3-70b-instruct:free';
+  Future<void> setOpenrouterModel(String v) => _p.setString(
+      'openrouter_model', v.trim().isEmpty ? 'meta-llama/llama-3.3-70b-instruct:free' : v.trim());
+  String get libraryJson => _p.getString('library_v1') ?? '';
+  Future<void> setLibraryJson(String v) => _p.setString('library_v1', v);
+  String get connectorsJson => _s('connectors_v1').isEmpty ? '[]' : _s('connectors_v1');
+  Future<void> setConnectorsJson(String v) => _write('connectors_v1', v);
+
+  /// Perfil de energia do OpenEXE: 'eco', 'equilibrado' ou 'desempenho'.
+  String get perfMode => _p.getString('perf_mode') ?? 'equilibrado';
+  Future<void> setPerfMode(String v) => _p.setString('perf_mode', v);
+  Duration get monitorEvery => switch (perfMode) {
+        'eco' => const Duration(seconds: 10),
+        'desempenho' => const Duration(seconds: 2),
+        _ => const Duration(seconds: 3),
+      };
+
+  /// Módulo da coluna direita que abre por padrão na sanfona (1 hub, 3 dock, 4 apps).
+  int get openRight => _p.getInt('open_right') ?? 3;
+  Future<void> setOpenRight(int v) => _p.setInt('open_right', v);
 
   // --- GitHub ---
   String get ghToken => _s('gh_token');

@@ -2,6 +2,8 @@ import 'app_agent_service.dart';
 import 'clipboard_history_service.dart';
 import 'gallery_service.dart';
 import 'local_calendar_service.dart';
+import 'connector_store.dart';
+import 'library_store.dart';
 import 'lock_service.dart';
 import 'notification_service.dart';
 import 'ocr_service.dart';
@@ -24,6 +26,8 @@ class DeviceKit {
     required this.places,
     required this.power,
     required this.lock,
+    required this.library,
+    required this.connectors,
   });
   final AppAgentService agent;
   final NotificationService notifs;
@@ -36,4 +40,6 @@ class DeviceKit {
   final PlaceService places;
   final PowerService power;
   final LockService lock;
+  final LibraryStore library;
+  final ConnectorStore connectors;
 }

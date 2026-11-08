@@ -98,6 +98,9 @@ class MainActivity : FlutterFragmentActivity() {
 
             // ----- Painel do aparelho (OpenEXE) -----
             "sys.stats" -> result.success(SystemKit.stats(this))
+            "sec.info" -> result.success(SystemKit.secInfo(this))
+            "opt.info" -> result.success(SystemKit.optInfo(this))
+            "opt.clearCache" -> result.success(SystemKit.clearCache(this))
             "sys.bluetooth" -> result.success(SystemKit.bluetoothOn(this))
             "sys.keyboard" -> result.success(SystemKit.physicalKeyboard())
             "app.quick" -> result.success(SystemKit.quick(this, call.argument<String>("which") ?: ""))
@@ -122,21 +125,38 @@ class MainActivity : FlutterFragmentActivity() {
 
             // ----- Telas de configuração do Android -----
             "openSettings" -> {
+                val pkg = Uri.parse("package:$packageName")
                 val i = when (call.argument<String>("which")) {
                     "accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                     "notifications" -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                    "appdetails" -> Intent(
-                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:$packageName")
-                    )
+                    "appdetails" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
                     "battery" -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    "ignorebattery" -> Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg)
+                    "batterysaver" -> Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+                    "usage" -> Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
+                    "storage" -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+                    "apps" -> Intent(Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS)
+                    "data" -> Intent(Settings.ACTION_DATA_USAGE_SETTINGS)
+                    "security" -> Intent(Settings.ACTION_SECURITY_SETTINGS)
+                    "developer" -> Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                    "installunknown" -> Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, pkg)
+                    "location" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
                     else -> null
                 }
+                var ok = false
                 if (i != null) {
                     i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(i)
+                    try {
+                        startActivity(i)
+                        ok = true
+                    } catch (e: Exception) {
+                        try {
+                            startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            ok = true
+                        } catch (e2: Exception) { }
+                    }
                 }
-                result.success(i != null)
+                result.success(ok)
             }
             else -> result.notImplemented()
         }

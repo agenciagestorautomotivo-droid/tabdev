@@ -42,14 +42,22 @@ class AiRouter {
   final SettingsStore settings;
 
   List<AiProvider> providers() {
+    final off = settings.aiDisabled;
+    return _all().where((p) => !off.contains(p.id)).toList();
+  }
+
+  /// Todos os provedores configurados (inclusive os desligados no painel).
+  List<AiProvider> allConfigured() => _all();
+
+  List<AiProvider> _all() {
     final s = settings;
     return [
       if (s.groqKey.isNotEmpty)
         AiProvider(
             id: 'groq',
-            name: 'groq llama-3.1-8b',
+            name: 'groq ${s.groqModel}',
             baseUrl: 'https://api.groq.com/openai/v1',
-            model: 'llama-3.1-8b-instant',
+            model: s.groqModel,
             key: s.groqKey,
             timeout: const Duration(seconds: 6)),
       if (s.geminiKey.isNotEmpty)
@@ -63,9 +71,9 @@ class AiRouter {
       if (s.openrouterKey.isNotEmpty)
         AiProvider(
             id: 'openrouter',
-            name: 'openrouter llama-3.3-70b:free',
+            name: 'openrouter ${s.openrouterModel}',
             baseUrl: 'https://openrouter.ai/api/v1',
-            model: 'meta-llama/llama-3.3-70b-instruct:free',
+            model: s.openrouterModel,
             key: s.openrouterKey,
             timeout: const Duration(milliseconds: 3500)),
       for (final c in s.customProviders)

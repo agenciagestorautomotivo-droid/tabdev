@@ -177,6 +177,19 @@ class NativeBridge {
     return m == null ? null : Map<String, dynamic>.from(m);
   }
 
+  static Future<Map<String, dynamic>> secInfo() async {
+    final m = await _call<Map<dynamic, dynamic>>('sec.info');
+    return m == null ? {} : Map<String, dynamic>.from(m);
+  }
+
+  static Future<Map<String, dynamic>> optInfo() async {
+    final m = await _call<Map<dynamic, dynamic>>('opt.info');
+    return m == null ? {} : Map<String, dynamic>.from(m);
+  }
+
+  /// Apaga o cache do app e devolve os bytes liberados.
+  static Future<int> clearCache() async => (await _call<int>('opt.clearCache')) ?? 0;
+
   static Future<bool> bluetoothOn() async => (await _call<bool>('sys.bluetooth')) ?? false;
   static Future<bool> physicalKeyboard() async => (await _call<bool>('sys.keyboard')) ?? false;
 

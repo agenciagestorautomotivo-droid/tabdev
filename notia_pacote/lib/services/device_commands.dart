@@ -39,6 +39,8 @@ class DeviceCommands {
 • rotina: 07:00 resumir minha agenda · rotinas · rotina remover N
 • lugar salvar casa · lugares · rotina: local casa => ...
 • alarme 07:30 [nome] · próximo alarme (usa o Relógio do Android; toca com o app fechado)
+• scripts · script <nome> · prompts · prompt <nome> (biblioteca do PAINEL)
+• conectores · conector <nome>: texto (webhooks do PAINEL)
 • aparelho (status das permissões)''';
 
   Future<bool> handle(String text) async {
@@ -249,6 +251,42 @@ class DeviceCommands {
           ? 'Nenhum alarme ativo. Crie com: alarme 07:30'
           : 'Próximo alarme: ${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')} (${n.day}/${n.month}).',
           color: N.cyan);
+      return true;
+    }
+
+    // ----- Biblioteca e conectores (PAINEL) -----
+    if (l == 'scripts' || l == 'prompts') {
+      final k = l == 'scripts' ? 'script' : 'prompt';
+      final xs = kit.library.all.where((e) => e.kind == k).toList();
+      say(xs.isEmpty ? 'Nada salvo. Crie no PAINEL > Scripts e prompts.' : xs.map((e) => '• ${e.name}').join('\n'),
+          color: N.text);
+      return true;
+    }
+    final sc = RegExp(r'^(script|prompt)\s+(.+)$', caseSensitive: false).firstMatch(text.trim());
+    if (sc != null) {
+      final kind = sc.group(1)!.toLowerCase();
+      final it = kit.library.byName(sc.group(2)!, kind: kind);
+      if (it == null) return false;
+      say('Executando ${it.name}…', color: N.dim);
+      final n = await kit.library.runItem(it);
+      say(n == 0 ? 'Nada para executar.' : '${it.name}: $n comando(s) enviados.', color: N.green);
+      return true;
+    }
+    if (l == 'conectores') {
+      final cs = kit.connectors.all;
+      say(cs.isEmpty ? 'Nenhum conector. Crie no PAINEL > Conectores.' : cs.map((e) => '• ${e.name}').join('\n'),
+          color: N.text);
+      return true;
+    }
+    final cn = RegExp(r'^conector\s+([^:]+):\s*(.+)$', caseSensitive: false).firstMatch(text.trim());
+    if (cn != null) {
+      final c = kit.connectors.byName(cn.group(1)!);
+      if (c == null) {
+        say('Conector "${cn.group(1)!.trim()}" não existe.', color: N.amber);
+      } else {
+        say('Enviando para ${c.name}…', color: N.dim);
+        say(await kit.connectors.call(c, cn.group(2)!), color: N.text);
+      }
       return true;
     }
 

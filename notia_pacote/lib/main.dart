@@ -7,6 +7,7 @@ import 'package:installed_apps/installed_apps.dart';
 
 import 'clipboard_popup.dart';
 import 'config_dialog.dart';
+import 'control_panel.dart';
 import 'global_search.dart';
 import 'panels/ai_hub_panel.dart';
 import 'panels/apps_panel.dart';
@@ -18,6 +19,7 @@ import 'services/ai_router.dart';
 import 'services/ai_task_service.dart';
 import 'services/app_agent_service.dart';
 import 'services/clipboard_history_service.dart';
+import 'services/connector_store.dart';
 import 'services/device_kit.dart';
 import 'services/dock_model.dart';
 import 'services/gallery_service.dart';
@@ -25,6 +27,7 @@ import 'services/github_sync_service.dart';
 import 'services/google_services.dart';
 import 'services/hybrid_calculator_service.dart';
 import 'services/keyboard_mode.dart';
+import 'services/library_store.dart';
 import 'services/local_calendar_service.dart';
 import 'services/lock_service.dart';
 import 'services/media_service.dart';
@@ -129,6 +132,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     places: PlaceService(widget.settings),
     power: _power,
     lock: LockService(),
+    library: LibraryStore(widget.settings),
+    connectors: ConnectorStore(widget.settings),
   );
 
   // OpenEXE
@@ -209,7 +214,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     _update.start();
     _update.addListener(_onUpdate);
     Future<void>.delayed(const Duration(seconds: 8), () => _update.check(wifi: _wifi));
-    _monitor.start();
+    _monitor.start(every: widget.settings.monitorEvery);
     await _kbd.init();
     await _tasks.load();
     _btOn = await NativeBridge.bluetoothOn();
@@ -226,6 +231,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   }
 
   void _initAi() {
+    _kit.library.run = (line) async {
+      _console?.say('Script: $line', color: N.dim);
+      await _console?.ask(line);
+    };
     NativeBridge.voiceConfirm = _voice.yesNo;
     NativeBridge.voiceStop = _voice.stop;
     _media.translator = (t) => _router.complete(
@@ -445,7 +454,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       _monitor.stop();
       _pausedAt ??= DateTime.now();
     } else {
-      _monitor.start();
+      _monitor.start(every: widget.settings.monitorEvery);
       final away = _pausedAt == null ? Duration.zero : DateTime.now().difference(_pausedAt!);
       _pausedAt = null;
       if (widget.settings.lockVault && away.inMinutes >= 5) _vaultLocked = true;
@@ -1217,7 +1226,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   int _flex(double v) => (v * 1000).round().clamp(1, 100000);
 
   /// Coluna da direita em sanfona: só um módulo aberto por vez (Dock por padrão).
-  int _openRight = 3;
+  late int _openRight = widget.settings.openRight;
 
   Widget _accordion() {
     final ids = _slots.sublist(2);
@@ -1660,7 +1669,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         b('GRAVADOR', () => _quick('recorder')),
         b('AJUSTES', () => _quick('settings')),
         const Spacer(),
-        b('EDITAR LAYOUT', _editLayout, accent: true),
+        b('PAINEL', _openPanel, accent: true),
+        b('EDITAR LAYOUT', _editLayout),
         b('SINCRONIZAR AGENDA', _syncAgenda),
         ListenableBuilder(
           listenable: _kbd,
@@ -1787,6 +1797,50 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _openPanel() async {
+    if (widget.settings.lockConfig &&
+        !await _kit.lock.authenticate('Abrir o painel de controle do OpenEXE')) {
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ControlPanel(
+        settings: widget.settings,
+        router: _router,
+        repos: _repos,
+        library: _kit.library,
+        connectors: _kit.connectors,
+        google: _google,
+        sb: _sb,
+        brain: widget.brain,
+        clip: _kit.clip,
+        monitor: _monitor,
+        runCommand: (c) async => await _console?.ask(c),
+        openConfig: _openConfig,
+        lockNow: () {
+          if (mounted) setState(() => _locked = true);
+        },
+        onChanged: _reloadLayout,
+      ),
+    ));
+    _reloadLayout();
+    _syncWake();
+  }
+
+  /// Relê layout, perfil e opções que o painel pode ter mudado.
+  void _reloadLayout() {
+    if (!mounted) return;
+    setState(() {
+      _slots = widget.settings.slots5;
+      _col = widget.settings.col5;
+      _left = widget.settings.left5;
+      _ra = widget.settings.rightA5;
+      _rb = widget.settings.rightB5;
+      _openRight = widget.settings.openRight;
+    });
+    _monitor.start(every: widget.settings.monitorEvery);
+  }
+
   Future<void> _openConfig() async {
     if (widget.settings.lockConfig &&
         !await _kit.lock.authenticate('Abrir as configurações do OpenEXE')) {
@@ -1818,6 +1872,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyK, control: true): _globalSearch,
           const SingleActivator(LogicalKeyboardKey.keyN, control: true): _quickNote,
+          const SingleActivator(LogicalKeyboardKey.keyP, control: true): _openPanel,
           const SingleActivator(LogicalKeyboardKey.keyL, control: true): () => _console?.showKeyboard(),
           const SingleActivator(LogicalKeyboardKey.keyM, control: true): () => _console?.toggleMic(),
           const SingleActivator(LogicalKeyboardKey.escape): () => _console?.clearInput(),

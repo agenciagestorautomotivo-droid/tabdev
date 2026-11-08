@@ -252,4 +252,21 @@ CREATE TABLE IF NOT EXISTS variaveis_calc (
   Future<int> countCache() async =>
       Sqflite.firstIntValue(await _db.rawQuery('SELECT COUNT(*) FROM cache_comandos')) ??
           0;
+
+  // ---------- Manutenção (PAINEL > Otimização) ----------
+  Future<void> clearCache() => _db.delete('cache_comandos');
+
+  /// Apaga eventos do histórico mais antigos que [days] dias; devolve quantos saíram.
+  Future<int> pruneHistory({int days = 30}) async {
+    final cut = DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
+    try {
+      return await _db.delete('historico_eventos', where: 'timestamp < ?', whereArgs: [cut]);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> vacuum() => _db.execute('VACUUM');
+  Future<int> countHistory() async =>
+      Sqflite.firstIntValue(await _db.rawQuery('SELECT COUNT(*) FROM historico_eventos')) ?? 0;
 }

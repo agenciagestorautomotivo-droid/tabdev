@@ -345,4 +345,64 @@ object SystemKit {
     } catch (_: Exception) {
         false
     }
+
+    // ---------- Segurança e otimização (PAINEL) ----------
+    private fun dirSize(f: File?): Long {
+        if (f == null || !f.exists()) return 0L
+        if (f.isFile) return f.length()
+        var n = 0L
+        f.listFiles()?.forEach { n += dirSize(it) }
+        return n
+    }
+
+    private fun dirClear(f: File?): Long {
+        if (f == null || !f.exists()) return 0L
+        var n = 0L
+        f.listFiles()?.forEach {
+            val sz = dirSize(it)
+            if (it.deleteRecursively()) n += sz
+        }
+        return n
+    }
+
+    fun secInfo(ctx: Context): Map<String, Any?> {
+        val o = HashMap<String, Any?>()
+        try {
+            val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+            o["secure"] = km.isDeviceSecure
+        } catch (e: Exception) { o["secure"] = null }
+        o["patch"] = android.os.Build.VERSION.SECURITY_PATCH ?: ""
+        o["release"] = android.os.Build.VERSION.RELEASE ?: ""
+        o["sdk"] = android.os.Build.VERSION.SDK_INT
+        o["model"] = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+        try {
+            o["dev"] = Settings.Global.getInt(ctx.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1
+            o["adb"] = Settings.Global.getInt(ctx.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
+        } catch (e: Exception) { }
+        try {
+            o["installUnknown"] = ctx.packageManager.canRequestPackageInstalls()
+        } catch (e: Exception) { }
+        try {
+            val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+            val st = dpm.storageEncryptionStatus
+            o["encrypted"] = st == android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE ||
+                st == android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_PER_USER ||
+                st == android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY
+        } catch (e: Exception) { }
+        val su = listOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/su/bin/su", "/data/local/xbin/su")
+        o["root"] = su.any { File(it).exists() }
+        return o
+    }
+
+    fun optInfo(ctx: Context): Map<String, Any?> {
+        val o = HashMap<String, Any?>()
+        val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        o["ignoringBattery"] = try { pm.isIgnoringBatteryOptimizations(ctx.packageName) } catch (e: Exception) { false }
+        o["powerSave"] = pm.isPowerSaveMode
+        o["cacheBytes"] = dirSize(ctx.cacheDir) + dirSize(ctx.externalCacheDir)
+        return o
+    }
+
+    /** Apaga o cache do OpenEXE (não toca em notas, vault, imagens da área de transferência nem atualização). */
+    fun clearCache(ctx: Context): Long = dirClear(ctx.cacheDir) + dirClear(ctx.externalCacheDir)
 }

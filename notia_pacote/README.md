@@ -189,3 +189,14 @@ Este código foi escrito sem acesso ao Flutter SDK, então a primeira compilaç�
 - **Tela de bloqueio do OpenEXE:** camada extra com biometria/PIN; não substitui o bloqueio do Android.
 - **Barra de tarefas da IA** com barra de progresso e botão PARAR (agente de apps, backup, atualização, console).
 - **Coluna direita em sanfona:** Hub de IAs, Dock e Apps; só um aberto por vez, Dock aberto por padrão.
+
+## Painel de controle (botão PAINEL ou Ctrl+P)
+
+- **IAs:** liga/desliga, chave, modelo e teste de cada IA; provedores próprios (DeepSeek, Mistral, Together, Ollama); especialista dos pedidos complexos.
+- **Repositórios:** token do GitHub, lista, padrão, busca na sua conta.
+- **Conectores:** status de Google, GitHub, Supabase, acessibilidade e notificações; webhooks próprios (`conector nome: texto`).
+- **Plugins:** módulos internos ligáveis (palavra de ativação, segundo plano, bloqueios, backup, atualização).
+- **Mods:** posição dos módulos, sanfona padrão e larguras.
+- **Scripts e prompts:** biblioteca (`script nome`, `prompt nome`, `scripts`, `prompts`).
+- **Segurança:** nota 0–100 (bloqueio de tela, criptografia, patch, USB debugging, root), acessos concedidos, bloquear agora, limpar rastros, apagar chaves.
+- **Otimização:** RAM/armazenamento/CPU/temperatura, perfis de energia, limpeza de cache/IA/histórico/banco, bateria e atalhos do Android.
