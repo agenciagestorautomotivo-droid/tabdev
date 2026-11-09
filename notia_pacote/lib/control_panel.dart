@@ -15,6 +15,7 @@ import 'services/settings_store.dart';
 import 'services/supabase_sync_service.dart';
 import 'services/system_monitor_service.dart';
 import 'services/termux_service.dart';
+import 'services/tts_service.dart';
 import 'theme.dart';
 
 /// Painel de controle do OpenEXE: IAs, repositórios, conectores, plugins, mods e biblioteca
@@ -37,6 +38,7 @@ class ControlPanel extends StatefulWidget {
     required this.monitor,
     required this.lockNow,
     required this.termuxService,
+    required this.tts,
   });
   final SettingsStore settings;
   final AiRouter router;
@@ -53,6 +55,7 @@ class ControlPanel extends StatefulWidget {
   final SystemMonitorService monitor;
   final VoidCallback lockNow;
   final TermuxService termuxService;
+  final TtsService tts;
 
   @override
   State<ControlPanel> createState() => _ControlPanelState();
@@ -80,6 +83,7 @@ class _ControlPanelState extends State<ControlPanel> {
     ['Segurança', Icons.shield_outlined],
     ['Otimização', Icons.speed_outlined],
     ['Dev · Termux', Icons.code],
+    ['Voz', Icons.record_voice_over_outlined],
   ];
 
   @override
@@ -96,6 +100,9 @@ class _ControlPanelState extends State<ControlPanel> {
   TermuxState? _tx;
   String _termOut = '';
   List<String> _projects = [];
+  List<Map<String, String>> _sysVoices = [];
+  String _ttsNote = '';
+  bool _voicesLoaded = false;
 
   Future<void> _loadSecOpt() async {
     final sec = await NativeBridge.secInfo();
@@ -1303,6 +1310,151 @@ class _ControlPanelState extends State<ControlPanel> {
     ]);
   }
 
+
+  // ---------- Voz do assistente ----------
+  Widget _slider(String label, double v, double min, double max, String shown, Future<void> Function(double) save,
+          {int? div}) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$label: $shown', style: N.t(s: 13)),
+        Slider(
+          value: v.clamp(min, max),
+          min: min,
+          max: max,
+          divisions: div,
+          activeColor: N.cyan,
+          onChanged: (x) async {
+            await save(x);
+            if (mounted) setState(() {});
+          },
+          onChangeEnd: (_) => widget.tts.refresh(),
+        ),
+      ]);
+
+  Future<void> _speakTest() async {
+    setState(() => _ttsNote = 'Falando…');
+    await widget.tts.refresh();
+    await widget.tts.speak(ctl('ttstest', 'Olá! Esta é a voz do seu assistente. Como posso ajudar?').text);
+    if (mounted) setState(() => _ttsNote = widget.tts.lastNote);
+  }
+
+  Widget _voiceTab() {
+    if (!_voicesLoaded) {
+      _voicesLoaded = true;
+      widget.tts.systemVoices().then((v) {
+        if (mounted) setState(() => _sysVoices = v);
+      });
+    }
+    final gem = s.ttsEngine == 'gemini';
+    final cur = s.ttsVoice;
+    final names = _sysVoices.map((e) => e['name']!).toList();
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      _h('Voz', sub: 'Como o assistente fala com você. Teste aqui antes de usar no console.'),
+      _card(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _switch('Falar as respostas', 'O console lê em voz alta o que a IA responde.', s.speakReplies, s.setSpeakReplies),
+          const SizedBox(height: 4),
+          Text('Motor de voz', style: N.t(s: 13, w: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            NBtn('Voz do tablet', accent: !gem, onTap: () async {
+              await s.setTtsEngine('sistema');
+              _changed();
+            }),
+            NBtn('Gemini (mais natural)', accent: gem, onTap: () async {
+              await s.setTtsEngine('gemini');
+              _changed();
+            }),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+              gem
+                  ? 'Gemini: voz bem natural, 30 vozes, mas o plano grátis tem limite de pedidos por minuto e por dia. '
+                      'Quando estourar, o OpenEXE fala com a voz do tablet por 2 minutos e volta depois. '
+                      'Frases com mais de 900 letras também usam a voz do tablet.'
+                  : 'Voz do tablet: instantânea, funciona sem internet e sem limite. Ideal para conversar bastante.',
+              style: N.t(c: N.dim, s: 11)),
+        ]),
+      ),
+      if (!gem)
+        _card(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Voz do tablet', style: N.t(c: N.cyan, w: FontWeight.w700)),
+            const SizedBox(height: 8),
+            if (names.isEmpty)
+              Text('Nenhuma voz em português encontrada. Instale em Ajustes do Android > Sistema > Idiomas > '
+                  'Saída de texto para fala > Google > Instalar dados de voz.',
+                  style: N.t(c: N.amber, s: 11))
+            else
+              Row(children: [
+                Expanded(child: Text('Voz', style: N.t(s: 13))),
+                DropdownButton<String>(
+                  value: names.contains(cur) ? cur : null,
+                  hint: Text('padrão do sistema', style: N.t(c: N.dim, s: 13)),
+                  dropdownColor: N.field,
+                  underline: const SizedBox(),
+                  style: N.t(s: 13),
+                  items: [for (final v in _sysVoices) DropdownMenuItem(value: v['name'], child: Text(v['name']!))],
+                  onChanged: (n) async {
+                    final v = _sysVoices.firstWhere((e) => e['name'] == n);
+                    await s.setTtsVoice(v['name']!, v['locale']!);
+                    await widget.tts.refresh();
+                    _changed();
+                  },
+                ),
+              ]),
+            _slider('Velocidade', s.ttsRate, 0.5, 2.0, '${s.ttsRate.toStringAsFixed(2)}x', s.setTtsRate, div: 30),
+            _slider('Tom (grave ↔ agudo)', s.ttsPitch, 0.5, 2.0, s.ttsPitch.toStringAsFixed(2), s.setTtsPitch, div: 30),
+            _slider('Volume', s.ttsVolume, 0.2, 1.0, '${(s.ttsVolume * 100).round()}%', s.setTtsVolume, div: 8),
+          ]),
+        ),
+      if (gem)
+        _card(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Voz do Gemini', style: N.t(c: N.cyan, w: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: Text('Voz', style: N.t(s: 13))),
+              DropdownButton<String>(
+                value: TtsService.geminiVoices.contains(s.geminiVoice) ? s.geminiVoice : 'Kore',
+                dropdownColor: N.field,
+                underline: const SizedBox(),
+                style: N.t(s: 13),
+                items: [for (final v in TtsService.geminiVoices) DropdownMenuItem(value: v, child: Text(v))],
+                onChanged: (v) async {
+                  await s.setGeminiVoice(v ?? 'Kore');
+                  _changed();
+                },
+              ),
+            ]),
+            _slider('Velocidade', s.geminiRate, 0.75, 1.6, '${s.geminiRate.toStringAsFixed(2)}x', s.setGeminiRate, div: 17),
+            Text(s.geminiKey.isEmpty ? 'Falta a chave do Gemini (aba IAs).' : 'Usa a mesma chave do Gemini da aba IAs.',
+                style: N.t(c: s.geminiKey.isEmpty ? N.amber : N.dim, s: 11)),
+          ]),
+        ),
+      _card(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Testar', style: N.t(c: N.cyan, w: FontWeight.w700)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: ctl('ttstest', 'Olá! Esta é a voz do seu assistente. Como posso ajudar?'),
+            minLines: 2,
+            maxLines: 4,
+            style: N.t(s: 13),
+            decoration: _dec('Texto de teste'),
+          ),
+          const SizedBox(height: 8),
+          Row(children: [
+            NBtn('Falar', accent: true, onTap: _speakTest),
+            const SizedBox(width: 8),
+            NBtn('Parar', onTap: () => widget.tts.stop()),
+            const SizedBox(width: 10),
+            Expanded(child: Text(_ttsNote, style: N.t(c: N.amber, s: 11))),
+          ]),
+        ]),
+      ),
+    ]);
+  }
+
   // ---------- Estrutura ----------
   @override
   Widget build(BuildContext context) {
@@ -1315,7 +1467,8 @@ class _ControlPanelState extends State<ControlPanel> {
       5 => _libTab(),
       6 => _secTab(),
       7 => _optTab(),
-      _ => _devTab(),
+      8 => _devTab(),
+      _ => _voiceTab(),
     };
     return Scaffold(
       backgroundColor: N.bg,

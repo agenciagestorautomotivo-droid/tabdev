@@ -149,6 +149,8 @@ class WakeWordService {
   /// Só a palavra, sem pedido: abra o microfone normal.
   final void Function() onWakeOnly;
 
+  /// Verdadeiro enquanto o assistente está falando (para não ouvir a própria voz).
+  bool Function()? busy;
   bool _on = false;
   Timer? _t;
   int _empty = 0;
@@ -188,6 +190,10 @@ class WakeWordService {
     }
     final words = _words;
     if (words.isEmpty) return;
+    if (busy?.call() == true) {
+      _schedule(const Duration(seconds: 2));
+      return;
+    }
     // Não disputa o microfone logo depois de você ter usado o MIC.
     if (DateTime.now().difference(voice.lastOtherEnd) < const Duration(seconds: 6)) {
       _schedule(const Duration(seconds: 3));

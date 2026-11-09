@@ -47,6 +47,7 @@ import 'services/supabase_sync_service.dart';
 import 'services/system_monitor_service.dart';
 import 'services/tasks_service.dart';
 import 'services/text_utils.dart';
+import 'services/tts_service.dart';
 import 'services/update_service.dart';
 import 'services/voice_service.dart';
 import 'theme.dart';
@@ -160,6 +161,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   final _voiceStatus = ValueNotifier<String>('PRONTA');
   final TermuxService _termux = TermuxService();
   final VoiceService _voice = VoiceService();
+  late final TtsService _tts = TtsService(widget.settings);
   final AiTaskService _aiTasks = AiTaskService();
   late final WakeWordService _wake = WakeWordService(
     _voice,
@@ -292,6 +294,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       _aiTasks.finish('agent', result: 'Agente de apps concluído');
       _syncKeepAlive();
     };
+    _wake.busy = () => _tts.speaking;
     _syncWake();
     _syncKeepAlive();
     _refreshAlarm();
@@ -477,6 +480,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     _update.disposeTimer();
     _wake.stop();
     _voice.dispose();
+    _tts.dispose();
     _aiTasks.dispose();
     _monitor.dispose();
     _kbd.dispose();
@@ -1199,6 +1203,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             kit: _kit,
             keyboard: _kbd,
             voice: _voice,
+            tts: _tts,
             tasks: _aiTasks,
           ),
         );
@@ -1860,6 +1865,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         runCommand: (c) async => await _console?.ask(c),
         openConfig: _openConfig,
         termuxService: _termux,
+        tts: _tts,
         lockNow: () {
           if (mounted) setState(() => _locked = true);
         },

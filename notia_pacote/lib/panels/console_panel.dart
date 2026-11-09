@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart' hide Intent;
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
 import '../services/ai_task_service.dart';
 import '../services/keyboard_mode.dart';
+import '../services/tts_service.dart';
 import '../services/voice_service.dart';
 import '../services/ai_router.dart';
 import '../services/device_commands.dart';
@@ -55,6 +55,7 @@ class ConsolePanel extends StatefulWidget {
     required this.media,
     required this.kit,
     required this.voice,
+    required this.tts,
     this.tasks,
     this.keyboard,
   });
@@ -76,6 +77,7 @@ class ConsolePanel extends StatefulWidget {
   /// Modo do teclado (físico/virtual). Em modo físico o campo não abre o teclado da tela.
   final KeyboardMode? keyboard;
   final VoiceService voice;
+  final TtsService tts;
 
   /// Barra de tarefas da IA (opcional).
   final AiTaskService? tasks;
@@ -95,7 +97,6 @@ class ConsolePanelState extends State<ConsolePanel> {
         'Digite "ajuda" para ver o que o Notia faz com o aparelho (agente de apps, notificações, câmera...).',
         color: N.dim),
   ];
-  final _tts = FlutterTts();
   final _player = AudioPlayer();
   bool _listening = false;
   bool _busy = false;
@@ -131,7 +132,6 @@ class ConsolePanelState extends State<ConsolePanel> {
   @override
   void initState() {
     super.initState();
-    _tts.setLanguage('pt-BR');
     _clipTimer = Timer.periodic(const Duration(seconds: 2), (_) => _checkClipboard());
     _announceInbox();
   }
@@ -149,7 +149,7 @@ class ConsolePanelState extends State<ConsolePanel> {
   void dispose() {
     _clipTimer?.cancel();
     widget.voice.stop();
-    _tts.stop();
+    widget.tts.stop();
     _player.dispose();
     _ctrl.dispose();
     _focus.dispose();
@@ -186,7 +186,7 @@ class ConsolePanelState extends State<ConsolePanel> {
   void showImage(String path) => _add(_Msg('', mediaPath: path, mediaKind: 'image'));
 
   void speak(String text) {
-    if (widget.settings.speakReplies) _tts.speak(text);
+    if (widget.settings.speakReplies) widget.tts.speak(text);
   }
 
   Future<void> ask(String text) => _submit(text);
@@ -574,6 +574,7 @@ class ConsolePanelState extends State<ConsolePanel> {
   int _micTries = 0;
 
   Future<void> toggleMic() async {
+    await widget.tts.stop(); // não ouve a própria voz
     if (_listening) {
       _micTries = 99; // toque do usuário: não reabrir sozinho
       await _stopListening();

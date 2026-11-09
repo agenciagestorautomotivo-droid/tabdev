@@ -207,3 +207,9 @@ Este código foi escrito sem acesso ao Flutter SDK, então a primeira compilaç�
 - **Console:** `dev <pedido>` (a IA planeja, roda no Termux, lê os erros e corrige em até 8 passos), `dev parar`, `dev status`, `termux <comando>`, `servir <pasta> [porta]` (abre no Dock).
 - Pede confirmação antes de executar; comandos perigosos (apagar a home, mkfs, dd) são bloqueados sempre.
 - Progresso na faixa TAREFA IA, com botão PARAR.
+
+## Voz do assistente (PAINEL > Voz)
+
+- **Voz do tablet:** escolha da voz, velocidade (0,5x a 2x), tom e volume; funciona offline e sem limite.
+- **Gemini TTS (opcional):** 30 vozes e velocidade; usa a chave do Gemini; no plano grátis tem limite, então cai sozinho na voz do tablet quando estoura.
+- O MIC corta a fala do assistente, e a palavra de ativação não escuta enquanto ele fala.

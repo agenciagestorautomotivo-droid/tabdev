@@ -111,6 +111,31 @@ class SettingsStore {
   Future<void> setDevDir(String v) =>
       _p.setString('dev_dir', v.trim().isEmpty ? 'projetos' : v.trim().replaceAll(RegExp(r'^[/~]+'), ''));
 
+  // --- Voz do assistente ---
+  /// 'sistema' (voz do tablet) ou 'gemini'.
+  String get ttsEngine => _p.getString('tts_engine') ?? 'sistema';
+  Future<void> setTtsEngine(String v) => _p.setString('tts_engine', v);
+  /// Multiplicador de velocidade da voz do tablet (1.0 = normal, até 2.0).
+  double get ttsRate => _p.getDouble('tts_rate') ?? 1.0;
+  Future<void> setTtsRate(double v) => _p.setDouble('tts_rate', v);
+  double get ttsPitch => _p.getDouble('tts_pitch') ?? 1.0;
+  Future<void> setTtsPitch(double v) => _p.setDouble('tts_pitch', v);
+  double get ttsVolume => _p.getDouble('tts_volume') ?? 1.0;
+  Future<void> setTtsVolume(double v) => _p.setDouble('tts_volume', v);
+  String get ttsVoice => _p.getString('tts_voice') ?? '';
+  String get ttsVoiceLocale => _p.getString('tts_voice_loc') ?? '';
+  Future<void> setTtsVoice(String name, String locale) async {
+    await _p.setString('tts_voice', name);
+    await _p.setString('tts_voice_loc', locale);
+  }
+
+  String get geminiVoice => _p.getString('gem_voice') ?? 'Kore';
+  Future<void> setGeminiVoice(String v) => _p.setString('gem_voice', v);
+  double get geminiRate => _p.getDouble('gem_rate') ?? 1.0;
+  Future<void> setGeminiRate(double v) => _p.setDouble('gem_rate', v);
+  String get geminiTtsModel => _p.getString('gem_tts_model') ?? '';
+  Future<void> setGeminiTtsModel(String v) => _p.setString('gem_tts_model', v);
+
   /// Perfil de energia do OpenEXE: 'eco', 'equilibrado' ou 'desempenho'.
   String get perfMode => _p.getString('perf_mode') ?? 'equilibrado';
   Future<void> setPerfMode(String v) => _p.setString('perf_mode', v);
