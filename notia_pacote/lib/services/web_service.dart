@@ -56,10 +56,7 @@ class WebService {
       .trim();
 
   static const _stop = {
-    'me', 'envie', 'enviar', 'mande', 'manda', 'pode', 'voce', 'você', 'por', 'favor', 'quero', 'gostaria', 'pesquise',
-    'pesquisar', 'pesquisa', 'busque', 'buscar', 'procure', 'sobre', 'as', 'os', 'a', 'o', 'de', 'do', 'da', 'dos', 'das',
-    'um', 'uma', 'para', 'pra', 'que', 'quando', 'pedi', 'deu', 'erro', 'na', 'no', 'em', 'mensagem', 'internet', 'web',
-    'google', 'e', 'ou', 'com', 'se', 'ter', 'pode', 'acontecido', 'oque', 'faz', 'fazer', 'diga', 'conte', 'fale',
+    'me', 'envie', 'enviar', 'mande', 'manda', 'pode', 'voce', 'você', 'por', 'favor', 'quero', 'gostaria', 'pesquise', 'pesquisar', 'pesquisa', 'busque', 'buscar', 'procure', 'sobre', 'as', 'os', 'a', 'o', 'de', 'do', 'da', 'dos', 'das', 'um', 'uma', 'para', 'pra', 'que', 'quando', 'pedi', 'deu', 'erro', 'na', 'no', 'em', 'mensagem', 'internet', 'web', 'google', 'e', 'ou', 'com', 'se', 'ter', 'acontecido', 'oque', 'faz', 'fazer', 'diga', 'conte', 'fale',
   };
   static const _generic = {'noticias', 'notícias', 'noticia', 'notícia', 'ultimas', 'últimas', 'hoje', 'domingo', 'segunda', 'terça', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'sábado', 'agora', 'manchetes'};
 
