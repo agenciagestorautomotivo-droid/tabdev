@@ -487,6 +487,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   // Proteção de bateria: pausa os timers JS dos WebViews e o monitor fora de foco.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // "inactive" é passageiro (pedido de permissão, barra do sistema, teclado): não é ir para segundo plano.
+    if (state == AppLifecycleState.inactive) return;
     final resumed = state == AppLifecycleState.resumed;
     _sys.invokeMethod(resumed ? 'resumeWebTimers' : 'pauseWebTimers').catchError((_) {});
     if (!resumed) {
@@ -1907,7 +1909,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
+    return PopScope(canPop: false, child: Focus(
       autofocus: true,
       child: CallbackShortcuts(
         bindings: {
@@ -1955,6 +1957,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
           ),
         ),
       ),
-    );
+    ));
   }
 }

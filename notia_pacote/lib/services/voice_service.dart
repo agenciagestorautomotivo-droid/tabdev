@@ -14,12 +14,23 @@ class VoiceService extends ChangeNotifier {
   bool listening = false;
   String owner = '';
   void Function()? _onEnd;
+  int _session = 0;
+  DateTime _startedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _watchdog;
+
+  /// Quando terminou a última escuta que NÃO era da palavra de ativação.
+  DateTime lastOtherEnd = DateTime.fromMillisecondsSinceEpoch(0);
 
   Future<bool> _init() async {
     if (_ready) return true;
     _ready = await _stt.initialize(
       onStatus: (s) {
-        if (s == 'done' || s == 'notListening') _ended();
+        if (s == 'done' || s == 'notListening') {
+          // O Android avisa o fim da sessão ANTIGA com atraso; sem este filtro, o aviso
+          // derrubava a sessão nova e o microfone ficava ligando e desligando sozinho.
+          if (DateTime.now().difference(_startedAt) < const Duration(milliseconds: 900)) return;
+          _ended();
+        }
       },
       onError: (_) => _ended(),
     );
@@ -28,6 +39,8 @@ class VoiceService extends ChangeNotifier {
 
   void _ended() {
     if (!listening) return;
+    _watchdog?.cancel();
+    if (owner != 'wake') lastOtherEnd = DateTime.now();
     listening = false;
     final cb = _onEnd;
     _onEnd = null;
@@ -44,10 +57,21 @@ class VoiceService extends ChangeNotifier {
     Duration pauseFor = const Duration(seconds: 4),
   }) async {
     if (!await _init()) return false;
-    if (listening) await stop();
+    if (listening || _stt.isListening) {
+      await stop();
+      // Dá tempo ao reconhecedor de encerrar de verdade antes de abrir outra sessão.
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+    }
+    final my = ++_session;
     listening = true;
     this.owner = owner;
     _onEnd = onEnd;
+    _startedAt = DateTime.now();
+    // Rede de segurança: se o aviso de fim nunca chegar, não fica "ouvindo" para sempre.
+    _watchdog?.cancel();
+    _watchdog = Timer(listenFor + const Duration(seconds: 4), () {
+      if (my == _session) _ended();
+    });
     notifyListeners();
     try {
       await _stt.listen(
@@ -57,6 +81,7 @@ class VoiceService extends ChangeNotifier {
         onResult: (r) => onResult(r.recognizedWords, r.finalResult),
       );
     } catch (_) {
+      _watchdog?.cancel();
       listening = false;
       notifyListeners();
       return false;
@@ -68,10 +93,14 @@ class VoiceService extends ChangeNotifier {
     try {
       await _stt.stop();
     } catch (_) {}
+    _watchdog?.cancel();
     if (listening) {
       listening = false;
+      final cb = _onEnd;
       _onEnd = null;
       notifyListeners();
+      // Só a palavra de ativação precisa saber (para voltar a escutar depois).
+      if (owner == 'wake') cb?.call();
     }
   }
 
@@ -122,6 +151,8 @@ class WakeWordService {
 
   bool _on = false;
   Timer? _t;
+  int _empty = 0;
+  bool _heard = false;
 
   bool get running => _on;
 
@@ -157,12 +188,19 @@ class WakeWordService {
     }
     final words = _words;
     if (words.isEmpty) return;
+    // Não disputa o microfone logo depois de você ter usado o MIC.
+    if (DateTime.now().difference(voice.lastOtherEnd) < const Duration(seconds: 6)) {
+      _schedule(const Duration(seconds: 3));
+      return;
+    }
+    _heard = false;
     final ok = await voice.listen(
       owner: 'wake',
       listenFor: const Duration(seconds: 25),
       pauseFor: const Duration(seconds: 3),
       onResult: (t, fin) {
         if (!fin || !_on) return;
+        _heard = true;
         final n = norm(t);
         for (final w in words) {
           final i = n.indexOf(w);
@@ -176,7 +214,12 @@ class WakeWordService {
           return;
         }
       },
-      onEnd: () => _schedule(const Duration(milliseconds: 1500)),
+      onEnd: () {
+        // Ciclos vazios seguidos: espera cada vez mais (poupa bateria e evita o "bip" repetido).
+        _empty = _heard ? 0 : (_empty + 1).clamp(0, 5);
+        final ms = _heard ? 1500 : (1500 * (1 << _empty)).clamp(1500, 30000);
+        _schedule(Duration(milliseconds: ms));
+      },
     );
     if (!ok) _schedule(const Duration(seconds: 15));
   }

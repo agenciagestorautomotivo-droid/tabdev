@@ -571,24 +571,46 @@ class ConsolePanelState extends State<ConsolePanel> {
   }
 
   // ---------- Voz ----------
+  int _micTries = 0;
+
   Future<void> toggleMic() async {
     if (_listening) {
+      _micTries = 99; // toque do usuário: não reabrir sozinho
       await _stopListening();
       return;
     }
-    setState(() => _listening = true);
+    _micTries = 0;
+    await _startMic();
+  }
+
+  /// Abre o microfone. Se o Android encerrar sem ouvir nada (silêncio inicial), reabre
+  /// até 3 vezes, para dar tempo de começar a falar.
+  Future<void> _startMic() async {
+    var heard = false;
+    if (mounted) setState(() => _listening = true);
     widget.voiceStatus.value = 'OUVINDO';
     final ok = await widget.voice.listen(
       owner: 'console',
+      pauseFor: const Duration(seconds: 5),
       onResult: (t, fin) {
+        if (t.trim().isNotEmpty) heard = true;
         _ctrl.text = t;
         if (fin) {
+          _micTries = 99;
           _stopListening();
           _submit(t);
         }
       },
       onEnd: () {
-        if (mounted) setState(() => _listening = false);
+        if (!mounted) return;
+        if (!heard && _micTries < 3 && _listening) {
+          _micTries++;
+          Future<void>.delayed(const Duration(milliseconds: 300), () {
+            if (mounted && _listening) _startMic();
+          });
+          return;
+        }
+        setState(() => _listening = false);
         widget.voiceStatus.value = 'PRONTA';
       },
     );
