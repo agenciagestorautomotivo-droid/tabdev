@@ -1204,7 +1204,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             keyboard: _kbd,
             voice: _voice,
             tts: _tts,
-        voice: _voice,
             tasks: _aiTasks,
           ),
         );
@@ -1866,6 +1865,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         runCommand: (c) async => await _console?.ask(c),
         openConfig: _openConfig,
         termuxService: _termux,
+        voice: _voice,
         tts: _tts,
         lockNow: () {
           if (mounted) setState(() => _locked = true);
