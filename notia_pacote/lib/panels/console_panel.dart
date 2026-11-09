@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../services/ai_task_service.dart';
 import '../services/keyboard_mode.dart';
 import '../services/tts_service.dart';
+import '../services/web_service.dart';
 import '../services/voice_service.dart';
 import '../services/ai_router.dart';
 import '../services/device_commands.dart';
@@ -116,6 +117,8 @@ class ConsolePanelState extends State<ConsolePanel> {
   String? _clipUrl;
 
   static final _urlRe = RegExp(r'https?://\S+');
+
+  late final WebService _web = WebService(widget.router, widget.settings);
 
   late final DeviceCommands _dev = DeviceCommands(
     kit: widget.kit,
@@ -387,6 +390,25 @@ class ConsolePanelState extends State<ConsolePanel> {
     }
     final force = prompt.startsWith('/esp ');
     if (force) prompt = prompt.substring(5);
+
+    if (providerId == null && !force && widget.settings.webOn && WebService.shouldUse(prompt)) {
+      _setBusy(true, 'Pesquisando na internet…');
+      try {
+        final w = await _web.answer(prompt);
+        _add(_Msg(w.text, badge: '[${w.via}]', color: N.green));
+        if (w.sources.isNotEmpty) {
+          _add(_Msg(
+              'Fontes:\n${w.sources.take(5).map((h) => '• ${h.title.isEmpty ? h.source : h.title}${h.url.isEmpty ? '' : '\n  ${h.url}'}').join('\n')}',
+              color: N.dim));
+        }
+        speak(w.text);
+      } catch (e) {
+        _add(_Msg('Falha na pesquisa: ${_clean(e)}', color: N.red));
+      } finally {
+        _setBusy(false);
+      }
+      return;
+    }
 
     _setBusy(true, 'IA pensando…');
     try {

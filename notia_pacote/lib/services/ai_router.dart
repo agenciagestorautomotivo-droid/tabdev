@@ -59,7 +59,7 @@ class AiRouter {
             baseUrl: 'https://api.groq.com/openai/v1',
             model: s.groqModel,
             key: s.groqKey,
-            timeout: const Duration(seconds: 6)),
+            timeout: const Duration(seconds: 15)),
       if (s.geminiKey.isNotEmpty)
         AiProvider(
             id: 'gemini',
@@ -67,7 +67,7 @@ class AiRouter {
             baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
             model: s.geminiModel,
             key: s.geminiKey,
-            timeout: const Duration(seconds: 12)),
+            timeout: const Duration(seconds: 40)),
       if (s.openrouterKey.isNotEmpty)
         AiProvider(
             id: 'openrouter',
@@ -75,7 +75,7 @@ class AiRouter {
             baseUrl: 'https://openrouter.ai/api/v1',
             model: s.openrouterModel,
             key: s.openrouterKey,
-            timeout: const Duration(milliseconds: 3500)),
+            timeout: const Duration(seconds: 40)),
       for (final c in s.customProviders)
         if ((c['baseUrl'] ?? '').isNotEmpty && (c['model'] ?? '').isNotEmpty)
           AiProvider(
@@ -84,7 +84,7 @@ class AiRouter {
               baseUrl: c['baseUrl']!,
               model: c['model']!,
               key: c['key'] ?? '',
-              timeout: const Duration(seconds: 15)),
+              timeout: const Duration(seconds: 40)),
     ];
   }
 
@@ -156,7 +156,7 @@ class AiRouter {
       wanted.addAll(['agenda_hoje', 'agenda_local']);
     }
     final ctx = await brain.getKvs(wanted);
-    final sys = StringBuffer('Você é o Notia. Responda em português, curto e direto.');
+    final sys = StringBuffer('Você é o Notia. Responda em português, curto e direto. Hoje é ${_hoje()}.');
     ctx.forEach((k, v) => sys.write(' $k: $v.'));
     sys.write(ctxText);
 
@@ -218,7 +218,7 @@ class AiRouter {
   }
 
   Future<String> _chat(AiProvider p, String system, String user,
-      {required Duration timeout, int maxTokens = 500, double temperature = 0.5}) async {
+      {required Duration timeout, int maxTokens = 900, double temperature = 0.5}) async {
     final res = await http
         .post(
           p.endpoint,
@@ -261,6 +261,14 @@ class AiRouter {
     final data = jsonDecode(utf8.decode(res.bodyBytes));
     return (data['choices'][0]['message']['content'] as String).trim();
   }
+
+  static String _hoje() {
+    final n = DateTime.now();
+    const d = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+    return '${d[n.weekday - 1]}, ${n.day.toString().padLeft(2, '0')}/${n.month.toString().padLeft(2, '0')}/${n.year}, ${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<String?> discoverGemini() => _discoverGemini(settings.geminiKey);
 
   bool _retried = false;
 

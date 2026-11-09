@@ -136,6 +136,10 @@ class SettingsStore {
   String get geminiTtsModel => _p.getString('gem_tts_model') ?? '';
   Future<void> setGeminiTtsModel(String v) => _p.setString('gem_tts_model', v);
 
+  /// Pesquisa na internet pelo console (busca do Google via Gemini ou notícias + web).
+  bool get webOn => _p.getBool('web_on') ?? true;
+  Future<void> setWebOn(bool v) => _p.setBool('web_on', v);
+
   /// Perfil de energia do OpenEXE: 'eco', 'equilibrado' ou 'desempenho'.
   String get perfMode => _p.getString('perf_mode') ?? 'equilibrado';
   Future<void> setPerfMode(String v) => _p.setString('perf_mode', v);

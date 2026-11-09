@@ -660,6 +660,7 @@ class _ControlPanelState extends State<ControlPanel> {
             }
             await s.setWakeOn(v);
           }),
+          _switch('Pesquisa na internet', 'Perguntas sobre notícias, cotações, clima e "pesquise…" usam a busca do Google (via Gemini) ou notícias e web.', s.webOn, s.setWebOn),
           _switch('Modo segundo plano', 'Notificação fixa "OpenEXE ativo" para o Android não encerrar o app.',
               s.keepAlive, s.setKeepAlive),
           _switch('Tela de bloqueio do OpenEXE', 'Camada extra com biometria/PIN do aparelho.', s.osLock, s.setOsLock),
