@@ -33,26 +33,32 @@ class TtsService extends ChangeNotifier {
     'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat',
   ];
 
+  Completer<void>? _playDone;
+  Future<void> _chain = Future<void>.value();
+  String _lastText = '';
+  DateTime _lastAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   Future<void> _setup() async {
     await _sys.setLanguage('pt-BR');
     await _sys.awaitSpeakCompletion(true);
     await _applySystem();
-    _sys.setStartHandler(() {
-      speaking = true;
-      notifyListeners();
+    _player.onPlayerComplete.listen((_) {
+      final c = _playDone;
+      if (c != null && !c.isCompleted) c.complete();
     });
-    _sys.setCompletionHandler(_done);
-    _sys.setCancelHandler(_done);
-    _sys.setErrorHandler((_) => _done());
     _ready = true;
   }
 
-  void _done() {
-    if (_player.state == PlayerState.playing) return;
-    if (speaking) {
-      speaking = false;
-      notifyListeners();
-    }
+  /// Cala as DUAS vozes (tablet e Gemini). Chamado antes de qualquer fala nova.
+  Future<void> _silence() async {
+    try {
+      await _sys.stop();
+    } catch (_) {}
+    try {
+      await _player.stop();
+    } catch (_) {}
+    final c = _playDone;
+    if (c != null && !c.isCompleted) c.complete();
   }
 
   /// Reaplica velocidade, tom, volume e voz escolhidos.
@@ -93,12 +99,7 @@ class TtsService extends ChangeNotifier {
 
   Future<void> stop() async {
     _gen++;
-    try {
-      await _sys.stop();
-    } catch (_) {}
-    try {
-      await _player.stop();
-    } catch (_) {}
+    await _silence();
     if (speaking) {
       speaking = false;
       notifyListeners();
@@ -113,25 +114,49 @@ class TtsService extends ChangeNotifier {
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 
-  Future<void> speak(String raw) async {
+  /// Fala um texto. Só uma voz por vez: uma fala nova cancela a anterior e as falas
+  /// passam por uma fila única, então nunca tocam duas ao mesmo tempo.
+  Future<void> speak(String raw) {
     final text = clean(raw);
-    if (text.isEmpty) return;
+    if (text.isEmpty) return Future.value();
+    final now = DateTime.now();
+    if (text == _lastText && now.difference(_lastAt) < const Duration(seconds: 3)) return Future.value();
+    _lastText = text;
+    _lastAt = now;
+    final my = ++_gen;
+    _silence(); // corta já a fala anterior; a fila abaixo garante a ordem
+    _chain = _chain.then((_) => _run(text, my)).catchError((_) {});
+    return _chain;
+  }
+
+  Future<void> _run(String text, int my) async {
+    if (my != _gen) return;
     if (!_ready) await _setup();
-    await stop();
-    final my = _gen;
+    if (my != _gen) return;
+    await _silence();
+    if (my != _gen) return;
     speaking = true;
     notifyListeners();
-    final useGemini = settings.ttsEngine == 'gemini' &&
-        settings.geminiKey.isNotEmpty &&
-        text.length <= 900 &&
-        DateTime.now().isAfter(_geminiBlockedUntil);
-    if (useGemini) {
-      final ok = await _speakGemini(text, my);
-      if (ok || my != _gen) return;
+    try {
+      final useGemini = settings.ttsEngine == 'gemini' &&
+          settings.geminiKey.isNotEmpty &&
+          text.length <= 900 &&
+          DateTime.now().isAfter(_geminiBlockedUntil);
+      if (useGemini) {
+        final ok = await _speakGemini(text, my);
+        if (ok || my != _gen) return;
+      }
+      if (my != _gen) return;
+      await _silence(); // garante que o Gemini não está tocando antes da voz do tablet
+      await _applySystem();
+      if (my != _gen) return;
+      await _sys.speak(text);
+    } finally {
+      if (my == _gen && speaking) {
+        speaking = false;
+        notifyListeners();
+      }
     }
-    if (my != _gen) return;
-    await _applySystem();
-    await _sys.speak(text);
   }
 
   // ---------- Gemini TTS ----------
@@ -242,19 +267,19 @@ class TtsService extends ChangeNotifier {
       final f = File('${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.wav');
       await f.writeAsBytes(_wav(base64Decode(b64)));
       if (my != _gen) return true;
+      _playDone = Completer<void>();
       await _player.setPlaybackRate(settings.geminiRate);
       await _player.play(DeviceFileSource(f.path));
-      await _player.onPlayerComplete.first.timeout(const Duration(minutes: 3), onTimeout: () {});
+      await _playDone!.future.timeout(const Duration(minutes: 3), onTimeout: () {});
       try {
         await f.delete();
       } catch (_) {}
-      if (my == _gen && speaking) {
-        speaking = false;
-        notifyListeners();
-      }
       lastNote = '';
       return true;
     } catch (e) {
+      try {
+        await _player.stop(); // não deixa o áudio do Gemini tocando junto com a voz do tablet
+      } catch (_) {}
       lastNote = 'Gemini voz falhou; usei a voz do tablet.';
       return false;
     }

@@ -211,7 +211,7 @@ class SettingsStore {
   // --- Voz, segundo plano e tela de bloqueio ---
   bool get wakeOn => _p.getBool('wake_on') ?? false;
   Future<void> setWakeOn(bool v) => _p.setBool('wake_on', v);
-  String get wakeWords => _p.getString('wake_words') ?? 'ei exe, ei notia, open exe, openexe, ok notia';
+  String get wakeWords => _p.getString('wake_words') ?? 'ei exe, ei esse, ei notia, open exe, openexe, ok notia';
   Future<void> setWakeWords(String v) => _p.setString('wake_words', v.trim());
   bool get keepAlive => _p.getBool('keep_alive') ?? false;
   Future<void> setKeepAlive(bool v) => _p.setBool('keep_alive', v);

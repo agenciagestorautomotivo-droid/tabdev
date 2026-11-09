@@ -15,6 +15,8 @@ import 'services/settings_store.dart';
 import 'services/supabase_sync_service.dart';
 import 'services/system_monitor_service.dart';
 import 'services/termux_service.dart';
+import 'services/text_utils.dart';
+import 'services/voice_service.dart';
 import 'services/tts_service.dart';
 import 'theme.dart';
 
@@ -39,6 +41,7 @@ class ControlPanel extends StatefulWidget {
     required this.lockNow,
     required this.termuxService,
     required this.tts,
+    required this.voice,
   });
   final SettingsStore settings;
   final AiRouter router;
@@ -56,6 +59,7 @@ class ControlPanel extends StatefulWidget {
   final VoidCallback lockNow;
   final TermuxService termuxService;
   final TtsService tts;
+  final VoiceService voice;
 
   @override
   State<ControlPanel> createState() => _ControlPanelState();
@@ -102,6 +106,8 @@ class _ControlPanelState extends State<ControlPanel> {
   List<String> _projects = [];
   List<Map<String, String>> _sysVoices = [];
   String _ttsNote = '';
+  String _wakeHeard = '';
+  bool _wakeTesting = false;
   bool _voicesLoaded = false;
 
   Future<void> _loadSecOpt() async {
@@ -664,10 +670,94 @@ class _ControlPanelState extends State<ControlPanel> {
               s.autoUpdate, s.setAutoUpdate),
         ]),
       ),
+      _wakeCard(),
       Text('Plugins de terceiros ainda não existem: o que roda aqui são os módulos do próprio OpenEXE. '
           'Para estender, use Scripts e prompts e Conectores.',
           style: N.t(c: N.dim, s: 11)),
     ]);
+  }
+
+
+  Future<void> _wakeTest() async {
+    setState(() {
+      _wakeTesting = true;
+      _wakeHeard = 'Ouvindo… fale a frase de ativação e o pedido.';
+    });
+    final words = ctl('wakewords', s.wakeWords).text.split(',').map((e) => norm(e.trim())).where((e) => e.isNotEmpty).toList();
+    final ok = await widget.voice.listen(
+      owner: 'test',
+      listenFor: const Duration(seconds: 10),
+      pauseFor: const Duration(seconds: 3),
+      onResult: (t, fin) {
+        if (!mounted) return;
+        final n = norm(t);
+        final hit = words.where((w) => n.contains(w)).toList();
+        setState(() => _wakeHeard = hit.isEmpty
+            ? 'Ouvi: "$t"\nNão bateu com nenhuma palavra. Adicione exatamente como ele escreveu acima.'
+            : 'Ouvi: "$t"\n✓ Reconheceu a palavra "${hit.first}".');
+      },
+      onEnd: () {
+        if (mounted) setState(() => _wakeTesting = false);
+      },
+    );
+    if (!ok && mounted) {
+      setState(() {
+        _wakeTesting = false;
+        _wakeHeard = 'Microfone indisponível. Permita o microfone ao OpenEXE.';
+      });
+    }
+  }
+
+  Widget _wakeCard() {
+    final c = ctl('wakewords', s.wakeWords);
+    void add(String w) {
+      final cur = c.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      if (!cur.map(norm).contains(norm(w))) cur.add(w);
+      c.text = cur.join(', ');
+      setState(() {});
+    }
+
+    return _card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Frases de ativação', style: N.t(c: N.cyan, w: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text('Separe por vírgula. Fale a frase e o pedido juntos: "ei exe, abre o WhatsApp".', style: N.t(c: N.dim, s: 11)),
+        const SizedBox(height: 8),
+        TextField(controller: c, style: N.t(s: 13), decoration: _dec('Frases')),
+        const SizedBox(height: 8),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final w in const ['ei exe', 'ei esse', 'open exe', 'ok notia', 'computador', 'jarvis'])
+            ActionChip(
+              label: Text('+ $w', style: N.t(s: 11)),
+              backgroundColor: N.bg,
+              side: const BorderSide(color: N.border),
+              onPressed: () => add(w),
+            ),
+        ]),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          NBtn('Salvar frases', accent: true, onTap: () async {
+            final v = c.text.trim();
+            await s.setWakeWords(v.isEmpty ? 'ei exe, open exe' : v);
+            _snack('Frases salvas. Já valem agora.');
+            _changed();
+          }),
+          NBtn('Restaurar padrão', onTap: () async {
+            await s.setWakeWords('ei exe, ei esse, ei notia, open exe, openexe, ok notia');
+            c.text = s.wakeWords;
+            _changed();
+          }),
+          NBtn(_wakeTesting ? 'Ouvindo…' : 'Testar o que ele ouve', onTap: _wakeTesting ? null : _wakeTest),
+        ]),
+        if (_wakeHeard.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(_wakeHeard, style: N.t(c: N.text, s: 12)),
+        ],
+        const SizedBox(height: 6),
+        Text('Dica: o reconhecimento às vezes escreve "exe" como "esse" ou "ex". Use o teste, veja como ele escreveu e adicione essa grafia.',
+            style: N.t(c: N.dim, s: 11)),
+      ]),
+    );
   }
 
   // ---------- Mods (layout) ----------
@@ -1366,6 +1456,9 @@ class _ControlPanelState extends State<ControlPanel> {
             }),
           ]),
           const SizedBox(height: 6),
+          Text('Ativa agora: ${gem ? 'Gemini (${s.geminiVoice})' : 'voz do tablet'} · só uma voz fala por vez',
+              style: N.t(c: N.green, s: 11, w: FontWeight.w700)),
+          const SizedBox(height: 4),
           Text(
               gem
                   ? 'Gemini: voz bem natural, 30 vozes, mas o plano grátis tem limite de pedidos por minuto e por dia. '

@@ -1204,6 +1204,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             keyboard: _kbd,
             voice: _voice,
             tts: _tts,
+        voice: _voice,
             tasks: _aiTasks,
           ),
         );
