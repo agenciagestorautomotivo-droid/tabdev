@@ -868,6 +868,10 @@ class _ControlPanelState extends State<ControlPanel> {
         const SizedBox(width: 6),
         NBtn('+ Script', accent: true, onTap: () => _editLib(null, 'script')),
       ]),
+      const SizedBox(height: 6),
+      Text('Instruções fixas da IA: ${widget.library.ctxChars} de ${LibraryStore.ctxLimit} letras usadas. '
+          'Marque "A IA sempre lê" no item para ela seguir em toda conversa.',
+          style: N.t(c: widget.library.ctxChars > LibraryStore.ctxLimit ? N.amber : N.dim, s: 11)),
       const SizedBox(height: 10),
       if (items.isEmpty) Text('Nada aqui ainda.', style: N.t(c: N.dim, s: 12)),
       for (final it in items)
@@ -875,6 +879,7 @@ class _ControlPanelState extends State<ControlPanel> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               _pill(it.isScript ? 'SCRIPT' : 'PROMPT', it.isScript ? N.amber : N.violet),
+              if (it.ctx) ...[const SizedBox(width: 6), _pill('IA SEMPRE LÊ', N.green)],
               const SizedBox(width: 8),
               Expanded(child: Text(it.name, style: N.t(w: FontWeight.w700))),
             ]),
@@ -908,6 +913,7 @@ class _ControlPanelState extends State<ControlPanel> {
     final n = TextEditingController(text: it?.name ?? '');
     final b = TextEditingController(text: it?.body ?? '');
     var k = kind;
+    var cx = it?.ctx ?? false;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -935,6 +941,15 @@ class _ControlPanelState extends State<ControlPanel> {
                 decoration: _dec(k == 'script' ? 'Comandos (um por linha)' : 'Texto do prompt',
                     hint: k == 'script' ? 'resumir minha agenda\nalarme 07:30\nrotina: carregador => drive: backup' : null),
               ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text('A IA sempre lê', style: N.t(s: 13)),
+                subtitle: Text('Vira instrução fixa em toda conversa (gasta cota; limite de 3000 letras no total).', style: N.t(c: N.dim, s: 11)),
+                value: cx,
+                activeColor: N.cyan,
+                onChanged: (v) => setD(() => cx = v),
+              ),
             ]),
           ),
           actions: [
@@ -947,7 +962,7 @@ class _ControlPanelState extends State<ControlPanel> {
       ),
     );
     if (ok != true || n.text.trim().isEmpty || b.text.trim().isEmpty) return;
-    await widget.library.upsert(LibItem(it?.id ?? LibraryStore.newId(), k, n.text.trim(), b.text));
+    await widget.library.upsert(LibItem(it?.id ?? LibraryStore.newId(), k, n.text.trim(), b.text, ctx: cx));
     _changed();
   }
 

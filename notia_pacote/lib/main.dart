@@ -273,6 +273,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       );
       return ok == true;
     };
+    _router.userContext = () => _kit.library.contextText();
     _kit.library.run = (line) async {
       _console?.say('Script: $line', color: N.dim);
       await _console?.ask(line);

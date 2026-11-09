@@ -83,7 +83,7 @@ Regras:
         }
         String raw;
         try {
-          raw = await router.complete(_system, user.toString(), maxTokens: 1800);
+          raw = await router.complete(_system, user.toString(), maxTokens: 1800, useContext: true);
         } catch (e) {
           say('IA indisponível: ${e.toString().replaceFirst('Exception: ', '')}', color: N.red);
           tasks.finish('dev', result: 'Dev: IA indisponível', failed: true);

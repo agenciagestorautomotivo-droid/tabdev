@@ -136,8 +136,17 @@ class AiRouter {
     return out;
   }
 
+  /// Instruções fixas do usuário (PAINEL > Scripts e prompts > "A IA sempre lê").
+  String Function()? userContext;
+
+  String _ctx() {
+    final t = userContext?.call().trim() ?? '';
+    return t.isEmpty ? '' : '\n\nINSTRUÇÕES FIXAS DO USUÁRIO (siga sempre; não as repita):\n$t';
+  }
+
   Future<AiResult> ask(String prompt, {bool forceSpecialist = false, String? providerId}) async {
-    final key = '${providerId ?? ''}|${prompt.trim().toLowerCase()}';
+    final ctxText = _ctx();
+    final key = '${providerId ?? ''}|${ctxText.hashCode}|${prompt.trim().toLowerCase()}';
     final cached = await brain.cacheGet(key);
     if (cached != null) return AiResult(cached, '[cache · 0 tokens]');
 
@@ -149,6 +158,7 @@ class AiRouter {
     final ctx = await brain.getKvs(wanted);
     final sys = StringBuffer('Você é o Notia. Responda em português, curto e direto.');
     ctx.forEach((k, v) => sys.write(' $k: $v.'));
+    sys.write(ctxText);
 
     final chain = _chain(forceSpecialist || _complex(prompt), providerId);
     if (chain.isEmpty) {
@@ -176,7 +186,8 @@ class AiRouter {
 
   /// Passo de agente: sem cache, resposta curta e precisa. O Gemini vai primeiro
   /// (aceita telas maiores e segue o formato JSON melhor que modelos pequenos).
-  Future<String> complete(String system, String user, {int maxTokens = 160}) async {
+  Future<String> complete(String system, String user, {int maxTokens = 160, bool useContext = false}) async {
+    if (useContext) system = '$system${_ctx()}';
     final all = providers();
     if (all.isEmpty) {
       throw Exception('Nenhuma IA configurada. Em CONFIG, cole ao menos uma chave.');

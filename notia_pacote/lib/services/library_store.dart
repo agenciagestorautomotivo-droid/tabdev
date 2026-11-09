@@ -4,15 +4,18 @@ import 'settings_store.dart';
 
 /// Biblioteca do painel: prompts (texto enviado ao console) e scripts (um comando por linha).
 class LibItem {
-  LibItem(this.id, this.kind, this.name, this.body);
+  LibItem(this.id, this.kind, this.name, this.body, {this.ctx = false});
   final String id;
   String kind; // 'prompt' | 'script'
   String name;
   String body;
+
+  /// Instrução fixa: o texto entra em toda conversa com a IA.
+  bool ctx;
   bool get isScript => kind == 'script';
-  Map<String, dynamic> toJson() => {'id': id, 'k': kind, 'n': name, 'b': body};
+  Map<String, dynamic> toJson() => {'id': id, 'k': kind, 'n': name, 'b': body, 'x': ctx};
   static LibItem fromJson(Map<String, dynamic> j) =>
-      LibItem('${j['id']}', '${j['k']}', '${j['n']}', '${j['b']}');
+      LibItem('${j['id']}', '${j['k']}', '${j['n']}', '${j['b']}', ctx: j['x'] == true);
 }
 
 class LibraryStore {
@@ -66,6 +69,25 @@ class LibraryStore {
   Future<void> remove(String id) async {
     _list.removeWhere((e) => e.id == id);
     await _save();
+  }
+
+  /// Limite do que vai para a IA em toda conversa (~750 tokens).
+  static const ctxLimit = 3000;
+
+  int get ctxChars => _list.where((e) => e.ctx).fold(0, (a, e) => a + e.name.length + e.body.length + 6);
+
+  /// Texto das instruções fixas para a IA (vazio se não houver nenhuma marcada).
+  String contextText() {
+    final b = StringBuffer();
+    for (final e in _list.where((e) => e.ctx)) {
+      final t = '## ${e.name}\n${e.body.trim()}\n';
+      if (b.length + t.length > ctxLimit) {
+        b.write(t.substring(0, (ctxLimit - b.length).clamp(0, t.length)));
+        break;
+      }
+      b.write(t);
+    }
+    return b.toString().trim();
   }
 
   static String newId() => DateTime.now().microsecondsSinceEpoch.toString();
